@@ -54,11 +54,20 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
     
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
+
+        # filter out circles too close to the border
+        circle_shares = [image_operators.circle_share(image, circle) for circle in circles]
+        too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
+        circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
+
+        if len(circles) == 0:
+            logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
+            return None
         
         # Return the largest circle (assuming it's the main object)
         largest_circle = max(circles, key=lambda x: x[2])
 
-                # Save debug image if DEBUG is enabled
+        # Save debug image if DEBUG is enabled
         if settings.DEBUG:
             debug_image = image.copy()
             for (x, y, radius) in circles:

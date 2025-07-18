@@ -116,31 +116,6 @@ def circle_share(image: np.ndarray, circle: tuple[int, int, int]) -> float:
     return (shortest_side - shortest_distance) / shortest_side
 
 
-def min_distance_to_border(image: np.ndarray, circle: tuple[int, int, int]) -> int:
-    """
-    Calculate the minimum distance from the circle's edge to the image border.
-    
-    Args:
-        image: Input image
-        circle: Tuple of (x, y, radius) of the detected circle
-        
-    Returns:
-        Minimum distance from circle edge to image border, normalized to the shortest side of the image
-    """
-    x, y, radius = circle
-    height, width = image.shape[:2]
-    shortest_side = min(height, width)
-    
-    # Calculate distances to each border
-    distance_to_left = x - radius
-    distance_to_right = width - (x + radius)
-    distance_to_top = y - radius
-    distance_to_bottom = height - (y + radius)
-    
-    # Return the minimum distance
-    return min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom)/shortest_side
-
-
 def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
     """
     Crop an image with out-of-bounds support, filling with black pixels.
