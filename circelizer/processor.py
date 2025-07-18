@@ -137,14 +137,14 @@ def process_single_image(image_path: Path) -> bool:
             logger.error(f"Could not read image: {image_path}")
             return False
         
-        # Detect circle
+        # Step 1: Detect circle
         image_name = image_path.stem
         circle = detect_circle(image, image_name)
         if circle is None:
             logger.warning(f"No circle detected in {image_path}")
             return False
         
-        # Center and crop the image
+        # Step 2: Center and crop the image
         processed_image = center_and_crop_image(image, circle)
                 
         # Save the processed image
@@ -187,24 +187,61 @@ def process_images(input_path: str, output_path: str) -> dict:
     
     if not image_files:
         logger.warning(f"No JPG images found in {input_path}")
-        return {"total": 0, "processed": 0, "failed": 0}
+        return {"total": 0, "processed": 0, "failed": 0, "no_circles": 0}
     
     logger.info(f"Found {len(image_files)} images to process")
     
+    # Step 1: Detect circles for all images
+    circle_data = {}
+    no_circles_count = 0
     
+    for image_file in image_files:
+        try:
+            # Read the image
+            image = cv2.imread(str(image_file))
+            if image is None:
+                logger.error(f"Could not read image: {image_file}")
+                continue
+            
+            # Detect circle
+            image_name = image_file.stem
+            circle = detect_circle(image, image_name)
+            
+            if circle is None:
+                logger.warning(f"No circle detected in {image_file}")
+                no_circles_count += 1
+            else:
+                circle_data[image_file] = (image, circle)
+                
+        except Exception as e:
+            logger.error(f"Error detecting circle in {image_file}: {repr(e)}")
+    
+    logger.info(f"Circle detection complete: {len(circle_data)} circles found, {no_circles_count} images with no circles")
+    
+    # Step 2: Process images with detected circles
     processed_count = 0
     failed_count = 0
     
-    for image_file in image_files:
-        if process_single_image(image_file):
+    for image_file, (image, circle) in circle_data.items():
+        try:
+            # Center and crop the image
+            processed_image = center_and_crop_image(image, circle)
+            
+            # Save the processed image
+            output_path = output_dir.get() / image_file.name
+            cv2.imwrite(str(output_path), processed_image)
+            logger.info(f"Successfully processed {image_file} -> {output_path}")
             processed_count += 1
-        else:
+            
+        except Exception as e:
+            logger.error(f"Error processing {image_file}: {repr(e)}")
             failed_count += 1
     
     stats = {
         "total": len(image_files),
         "processed": processed_count,
-        "failed": failed_count
+        "failed": failed_count,
+        "no_circles": no_circles_count
     }
     
     logger.info(f"Processing complete: {stats}")
