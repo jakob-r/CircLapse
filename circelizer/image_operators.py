@@ -101,6 +101,20 @@ def scale_image(image: np.ndarray, target_width: int) -> np.ndarray:
     
     return scaled_image
 
+def circle_share(image: np.ndarray, circle: tuple[int, int, int]) -> float:
+    """
+    Calculate the share of the image that is covered by the circle.
+    """
+    x, y, radius = circle
+    height, width = image.shape[:2]
+    shortest_side = min(height, width)
+    distance_to_left = x - radius
+    distance_to_right = width - (x + radius)
+    distance_to_top = y - radius
+    distance_to_bottom = height - (y + radius)
+    shortest_distance = max(0, min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom))
+    return (shortest_side - shortest_distance) / shortest_side
+
 
 def min_distance_to_border(image: np.ndarray, circle: tuple[int, int, int]) -> int:
     """

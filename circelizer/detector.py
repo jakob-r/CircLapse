@@ -77,13 +77,10 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
             logger.debug(f"Saved debug image: {debug_path}")
         
         # Scale coordinates back to original image size if image was scaled
-        if scale_factor < 1.0:
-            x, y, radius = largest_circle
-            original_x = int(x / scale_factor)
-            original_y = int(y / scale_factor)
-            original_radius = int(radius / scale_factor)
-            return (original_x, original_y, original_radius)
-        
-        return tuple(largest_circle)
+        x, y, radius = largest_circle
+        original_x = int(x / scale_factor)
+        original_y = int(y / scale_factor)
+        original_radius = int(radius / scale_factor)
+        return (original_x, original_y, original_radius)
     
     return None

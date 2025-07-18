@@ -35,7 +35,7 @@ def process_images(input_path: str, output_path: str) -> dict:
     # Find all JPG images
     image_extensions = {'.jpg', '.jpeg', '.JPG', '.JPEG'}
     image_files = [
-        f for f in input_dir.rglob('*') 
+        f for f in input_dir.iterdir()
         if f.is_file() and f.suffix in image_extensions
     ]
     
@@ -75,12 +75,9 @@ def process_images(input_path: str, output_path: str) -> dict:
         return {"total": len(image_files), "processed": 0, "failed": 0, "no_circles": len(image_files)}
     
     # Step 2: Find how much space we have to work with
-    min_boarders = [image_operators.min_distance_to_border(image, circle) for image, circle in circle_data.values()]
-    min_boarder = min(min_boarders)
-    logger.info(f"Using minimum relative border: {min_boarder}")
-
-    min_radius = min(circle[2] for _, circle in circle_data.values())
-    logger.info(f"Using minimum radius: {min_radius}")
+    circle_shares = [image_operators.circle_share(image, circle) for image, circle in circle_data.values()]
+    max_circle_share = max(circle_shares)
+    logger.info(f"Using maximum circle share: {max_circle_share}")
 
     
     # Step 3: Process images with detected circles
@@ -91,7 +88,7 @@ def process_images(input_path: str, output_path: str) -> dict:
     for image_file, (image, circle) in circle_data.items():
         try:
             # Center and crop the image with consistent relative circle size and unified output width
-            processed_image = image_operators.center_and_crop_image_consistent(image, circle, 1)
+            processed_image = image_operators.center_and_crop_image_consistent(image, circle, max_circle_share)
 
             # scaled_image = image_operators.scale_image(processed_image, unified_width)
             scaled_image = processed_image
@@ -111,7 +108,8 @@ def process_images(input_path: str, output_path: str) -> dict:
         "processed": processed_count,
         "failed": failed_count,
         "no_circles": no_circles_count,
-        "unified_width": unified_width
+        "unified_width": unified_width,
+        "max_circle_share": max_circle_share
     }
     
     logger.info(f"Processing complete: {stats}")
