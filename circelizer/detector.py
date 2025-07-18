@@ -21,6 +21,7 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         Tuple of (x, y, radius) of the detected circle, or None if no circle found
     """
     # Scale image to consistent size for better circle detection
+    image = image.copy()
     height, width = image.shape[:2]
     scale_factor = target_size / max(height, width)
     
@@ -45,7 +46,7 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         dp=1,
         minDist=100,   # Minimum distance between circles
         param1=30,    # Edge detection threshold
-        param2=70,    # Accumulator threshold - adjusted for scaled images
+        param2=100,    # Accumulator threshold - adjusted for scaled images
         minRadius=shortest_side // 6, # Minimum radius - adjusted for scaled images
         maxRadius=shortest_side // 2 # Maximum radius - adjusted for scaled images
     )
@@ -58,19 +59,26 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         # filter out circles too close to the border
         circle_shares = [image_operators.circle_share(image, circle) for circle in circles]
         too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
-        circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
-
-        if len(circles) == 0:
+        small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
+        if len(small_circles) == 0:
             logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
             return None
         
+        big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
+        
         # Return the largest circle (assuming it's the main object)
-        largest_circle = max(circles, key=lambda x: x[2])
+        largest_circle = max(small_circles, key=lambda x: x[2])
+        max_circle_share = image_operators.circle_share(image, largest_circle)
 
         # Save debug image if DEBUG is enabled
         if settings.DEBUG:
             debug_image = image.copy()
-            for (x, y, radius) in circles:
+            for (x, y, radius) in big_circles:
+                # Draw circle outline
+                cv2.circle(debug_image, (x, y), radius, (0, 0, 120), 2)
+                # Draw center point
+                cv2.circle(debug_image, (x, y), 2, (0, 0, 120), 3)
+            for (x, y, radius) in small_circles:
                 # Draw circle outline
                 cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
                 # Draw center point
@@ -78,6 +86,14 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
 
             # draw biggest circle
             cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 2)
+            cv2.putText(debug_image, f"Max circle share: {max_circle_share:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+            # draw box centered on the largest circle
+            box_center = (largest_circle[0], largest_circle[1])
+            box_side = (2 * largest_circle[2]) / max_circle_share    
+            top_left = (int(box_center[0] - box_side // 2), int(box_center[1] - box_side // 2))
+            bottom_right = (int(box_center[0] + box_side // 2), int(box_center[1] + box_side // 2))
+            cv2.rectangle(debug_image, top_left, bottom_right, (255, 255, 255), 2)
             
             # Save debug image if output directory is available
             debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"

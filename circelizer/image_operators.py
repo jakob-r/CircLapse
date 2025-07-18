@@ -113,7 +113,7 @@ def circle_share(image: np.ndarray, circle: tuple[int, int, int]) -> float:
     distance_to_top = y - radius
     distance_to_bottom = height - (y + radius)
     shortest_distance = max(0, min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom))
-    return (shortest_side - shortest_distance) / shortest_side
+    return radius / (radius + shortest_distance)
 
 
 def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
