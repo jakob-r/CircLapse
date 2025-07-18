@@ -4,11 +4,12 @@ A Python library for detecting circles in images (like manhole covers), centerin
 
 ## Features
 
-- 🔍 **Circle Detection**: Uses OpenCV's Hough Circle Transform to detect circles in images
+- 🔍 **Advanced Circle Detection**: Multiple state-of-the-art detection methods including Hough Transform, Contour-based, RANSAC, and Gradient-based approaches
 - 🎯 **Auto-centering**: Automatically centers the detected circle in the image
 - ✂️ **Square Cropping**: Crops images to square format with the circle centered
 - 📁 **Batch Processing**: Process multiple images in a directory
-- 🖥️ **CLI Interface**: Easy-to-use command-line interface
+- 🖥️ **CLI Interface**: Easy-to-use command-line interface with method selection
+- 🧪 **Ensemble Detection**: Combines multiple methods for maximum reliability
 
 ## Installation
 
@@ -74,10 +75,42 @@ if __name__ == "__main__":
 ## How It Works
 
 1. **Image Scanning**: Recursively finds all JPG images in the input directory
-2. **Circle Detection**: Uses OpenCV's Hough Circle Transform to detect circles
+2. **Circle Detection**: Uses one of several state-of-the-art detection methods:
+   - **Hough Transform**: Fast detection for clean images
+   - **Contour-based**: Robust detection for imperfect circles
+   - **RANSAC**: Statistical approach for noisy images
+   - **Gradient-based**: Advanced detection using gradient information
+   - **Ensemble**: Combines all methods for maximum reliability
 3. **Centering**: Calculates the optimal crop area to center the detected circle
 4. **Cropping**: Crops the image to a square format with the circle centered
 5. **Saving**: Saves the processed image to the output directory
+
+## Detection Methods
+
+### Hough Transform (hough)
+- **Best for**: Clean images with well-defined circles
+- **Speed**: Fast
+- **Robustness**: Low
+
+### Contour-based (contour)
+- **Best for**: Imperfect circles, ellipses, moderate noise
+- **Speed**: Medium
+- **Robustness**: Medium
+
+### RANSAC (ransac)
+- **Best for**: Noisy images, partial circles, outliers
+- **Speed**: Slow
+- **Robustness**: High
+
+### Gradient-based (gradient)
+- **Best for**: Subtle circular features, weak edges
+- **Speed**: Very slow
+- **Robustness**: Medium
+
+### Ensemble (ensemble) - Default
+- **Best for**: Critical applications requiring maximum reliability
+- **Speed**: Slowest
+- **Robustness**: Highest
 
 ## Supported Image Formats
 

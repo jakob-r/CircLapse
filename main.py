@@ -17,11 +17,12 @@ def main():
     
     input_path = sys.argv[1]
     output_path = sys.argv[2]
+    output_format = sys.argv[3] if len(sys.argv) > 3 else 'jpg'
     
     print(f"Processing images from {input_path} to {output_path}")
     
     try:
-        stats = process_images(input_path, output_path)
+        stats = process_images(input_path, output_path, output_format)
         print(f"Processing complete!")
         print(f"Total images: {stats['total']}")
         print(f"Processed: {stats['processed']}")

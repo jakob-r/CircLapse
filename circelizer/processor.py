@@ -7,12 +7,12 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple
 import logging
-from circelizer import settings, detector, image_operators
+from circelizer import settings, detector, image_operators, saving
 from circelizer.context import output_dir
 
 logger = logging.getLogger(__name__)
 
-def process_images(input_path: str, output_path: str) -> dict:
+def process_images(input_path: str, output_path: str, output_format: str = 'jpg') -> dict:
     """
     Process all JPG images in the input path.
     
@@ -57,9 +57,11 @@ def process_images(input_path: str, output_path: str) -> dict:
                 logger.error(f"Could not read image: {image_file}")
                 continue
             
-            # Detect circle
+            # Detect circle using configured method
             image_name = image_file.stem
-            circle = detector.detect_circle(image, image_name)
+            method_name = settings.DETECTION_METHODS[settings.DETECTION_METHOD]
+            method_func = getattr(detector, method_name)
+            circle = method_func(image, image_name)
             
             if circle is None:
                 logger.warning(f"No circle detected in {image_file}")
@@ -81,7 +83,8 @@ def process_images(input_path: str, output_path: str) -> dict:
 
     
     # Step 3: Process images with detected circles
-    processed_count = 0
+    processed_images = []
+    processed_filenames = []
     failed_count = 0
     unified_width = 400
     
@@ -90,18 +93,23 @@ def process_images(input_path: str, output_path: str) -> dict:
             # Center and crop the image with consistent relative circle size and unified output width
             processed_image = image_operators.center_and_crop_image_consistent(image, circle, max_circle_share)
 
-            # scaled_image = image_operators.scale_image(processed_image, unified_width)
-            scaled_image = processed_image
+            scaled_image = image_operators.scale_image(processed_image, unified_width)
             
-            # Save the processed image
-            output_path = output_dir.get() / image_file.name
-            cv2.imwrite(str(output_path), scaled_image)
-            logger.info(f"Successfully processed {image_file} -> {output_path}")
-            processed_count += 1
+            # Collect processed images and filenames for batch saving
+            processed_images.append(scaled_image)
+            processed_filenames.append(image_file)
             
         except Exception as e:
             logger.error(f"Error processing {image_file}: {repr(e)}")
             failed_count += 1
+    
+    # Save all processed images
+    if output_format == 'jpg':
+        processed_count = saving.save_jpg(processed_images, processed_filenames)
+    elif output_format == 'gif':
+        processed_count = saving.save_gif(processed_images)
+    else:
+        raise ValueError(f"Invalid output format: {output_format}")
     
     stats = {
         "total": len(image_files),

@@ -38,11 +38,27 @@ def main():
         action="store_true",
         help="Enable verbose logging"
     )
+    parser.add_argument(
+        "--detection-method",
+        choices=['hough', 'contour', 'ransac', 'gradient'],
+        default='hough',
+        help="Circle detection method to use (default: hough)"
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode (saves debug images)"
+    )
     
     args = parser.parse_args()
     
     # Setup logging
     setup_logging(args.verbose)
+    
+    # Configure detection method and debug mode
+    from . import settings
+    settings.DETECTION_METHOD = args.detection_method
+    settings.DEBUG = args.debug
     
     try:
         # Process images
