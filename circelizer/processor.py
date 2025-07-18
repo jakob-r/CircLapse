@@ -7,156 +7,10 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple
 import logging
-from circelizer import settings
+from circelizer import settings, detector, image_operators
 from circelizer.context import output_dir
 
 logger = logging.getLogger(__name__)
-
-
-def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800) -> Optional[Tuple[int, int, int]]:
-    """
-    Detect the largest circle in the image.
-    
-    Args:
-        image: Input image as numpy array
-        image_name: Name for debug image (used when DEBUG=True)
-        target_size: Target size for the longest side (default: 800px)
-        
-    Returns:
-        Tuple of (x, y, radius) of the detected circle, or None if no circle found
-    """
-    # Scale image to consistent size for better circle detection
-    height, width = image.shape[:2]
-    scale_factor = target_size / max(height, width)
-    
-    # scale image to target size
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
-    image = cv2.resize(image, (new_width, new_height))
-    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
-    
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(gray, (9, 9), 2)
-    
-    # Detect circles using Hough Circle Transform
-    # Parameters optimized for ~800px images
-    circles = cv2.HoughCircles(
-        blurred,
-        cv2.HOUGH_GRADIENT,
-        dp=1,
-        minDist=80,   # Minimum distance between circles
-        param1=25,    # Edge detection threshold
-        param2=70,    # Accumulator threshold - adjusted for scaled images
-        minRadius=shortest_side // 4, # Minimum radius - adjusted for scaled images
-        maxRadius=shortest_side # Maximum radius - adjusted for scaled images
-    )
-    
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-        
-        # Save debug image if DEBUG is enabled
-        if settings.DEBUG:
-            debug_image = image.copy()
-            for (x, y, radius) in circles:
-                # Draw circle outline
-                cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
-                # Draw center point
-                cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
-            
-            # Save debug image if output directory is available
-            debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"
-            debug_path.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(debug_path), debug_image)
-            logger.debug(f"Saved debug image: {debug_path}")
-        
-        # Return the largest circle (assuming it's the main object)
-        largest_circle = max(circles, key=lambda x: x[2])
-        
-        # Scale coordinates back to original image size if image was scaled
-        if scale_factor < 1.0:
-            x, y, radius = largest_circle
-            original_x = int(x / scale_factor)
-            original_y = int(y / scale_factor)
-            original_radius = int(radius / scale_factor)
-            return (original_x, original_y, original_radius)
-        
-        return tuple(largest_circle)
-    
-    return None
-
-
-def center_and_crop_image(image: np.ndarray, circle: Tuple[int, int, int]) -> np.ndarray:
-    """
-    Center the image on the detected circle and crop to square.
-    
-    Args:
-        image: Input image
-        circle: Tuple of (x, y, radius) of the detected circle
-        
-    Returns:
-        Centered and cropped square image
-    """
-    x, y, radius = circle
-    height, width = image.shape[:2]
-    
-    # Calculate the size of the square crop (2 * radius + some padding)
-    crop_size = min(2 * radius + 50, min(width, height))
-    
-    # Calculate crop boundaries to center the circle
-    crop_x = max(0, min(x - crop_size // 2, width - crop_size))
-    crop_y = max(0, min(y - crop_size // 2, height - crop_size))
-    
-    # Ensure we don't go out of bounds
-    crop_x = max(0, min(crop_x, width - crop_size))
-    crop_y = max(0, min(crop_y, height - crop_size))
-    
-    # Crop the image
-    cropped = image[crop_y:crop_y + crop_size, crop_x:crop_x + crop_size]
-    
-    return cropped
-
-
-def process_single_image(image_path: Path) -> bool:
-    """
-    Process a single image: detect circle, center it, crop to square, and save.
-    
-    Args:
-        image_path: Path to input image
-        
-    Returns:
-        True if processing was successful, False otherwise
-    """
-    try:
-        # Read the image
-        image = cv2.imread(str(image_path))
-        if image is None:
-            logger.error(f"Could not read image: {image_path}")
-            return False
-        
-        # Step 1: Detect circle
-        image_name = image_path.stem
-        circle = detect_circle(image, image_name)
-        if circle is None:
-            logger.warning(f"No circle detected in {image_path}")
-            return False
-        
-        # Step 2: Center and crop the image
-        processed_image = center_and_crop_image(image, circle)
-                
-        # Save the processed image
-        output_path = output_dir.get() / image_path.name
-        cv2.imwrite(str(output_path), processed_image)
-        logger.info(f"Successfully processed {image_path} -> {output_path}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error processing {image_path}: {repr(e)}")
-        return False
-
 
 def process_images(input_path: str, output_path: str) -> dict:
     """
@@ -205,7 +59,7 @@ def process_images(input_path: str, output_path: str) -> dict:
             
             # Detect circle
             image_name = image_file.stem
-            circle = detect_circle(image, image_name)
+            circle = detector.detect_circle(image, image_name)
             
             if circle is None:
                 logger.warning(f"No circle detected in {image_file}")
@@ -216,16 +70,35 @@ def process_images(input_path: str, output_path: str) -> dict:
         except Exception as e:
             logger.error(f"Error detecting circle in {image_file}: {repr(e)}")
     
-    logger.info(f"Circle detection complete: {len(circle_data)} circles found, {no_circles_count} images with no circles")
+    if not circle_data:
+        logger.warning("No circles detected in any images")
+        return {"total": len(image_files), "processed": 0, "failed": 0, "no_circles": len(image_files)}
     
-    # Step 2: Process images with detected circles
+    # Step 2: Find the largest radius-to-image-size ratio and unified output width
+    max_ratio = 0
+    shortest_sides = []
+    
+    for image_file, (image, circle) in circle_data.items():
+        height, width = image.shape[:2]
+        shortest_side = min(height, width)
+        shortest_sides.append(shortest_side)
+        radius = circle[2]
+        ratio = radius / shortest_side
+        max_ratio = max(max_ratio, ratio)
+        logger.debug(f"{image_file.name}: radius={radius}, shortest_side={shortest_side}, ratio={ratio:.3f}")
+    
+    unified_width = image_operators.output_width(shortest_sides)
+    logger.info(f"Using maximum radius-to-image ratio: {max_ratio:.3f}")
+    logger.info(f"Using unified output width: {unified_width}")
+    
+    # Step 3: Process images with detected circles
     processed_count = 0
     failed_count = 0
     
     for image_file, (image, circle) in circle_data.items():
         try:
-            # Center and crop the image
-            processed_image = center_and_crop_image(image, circle)
+            # Center and crop the image with consistent relative circle size and unified output width
+            processed_image = image_operators.center_and_crop_image_relative(image, circle, max_ratio, unified_width)
             
             # Save the processed image
             output_path = output_dir.get() / image_file.name
@@ -241,7 +114,9 @@ def process_images(input_path: str, output_path: str) -> dict:
         "total": len(image_files),
         "processed": processed_count,
         "failed": failed_count,
-        "no_circles": no_circles_count
+        "no_circles": no_circles_count,
+        "max_ratio": max_ratio,
+        "unified_width": unified_width
     }
     
     logger.info(f"Processing complete: {stats}")
