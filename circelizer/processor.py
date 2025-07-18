@@ -74,35 +74,31 @@ def process_images(input_path: str, output_path: str) -> dict:
         logger.warning("No circles detected in any images")
         return {"total": len(image_files), "processed": 0, "failed": 0, "no_circles": len(image_files)}
     
-    # Step 2: Find the largest radius-to-image-size ratio and unified output width
-    max_ratio = 0
-    shortest_sides = []
-    
-    for image_file, (image, circle) in circle_data.items():
-        height, width = image.shape[:2]
-        shortest_side = min(height, width)
-        shortest_sides.append(shortest_side)
-        radius = circle[2]
-        ratio = radius / shortest_side
-        max_ratio = max(max_ratio, ratio)
-        logger.debug(f"{image_file.name}: radius={radius}, shortest_side={shortest_side}, ratio={ratio:.3f}")
-    
-    unified_width = image_operators.output_width(shortest_sides)
-    logger.info(f"Using maximum radius-to-image ratio: {max_ratio:.3f}")
-    logger.info(f"Using unified output width: {unified_width}")
+    # Step 2: Find how much space we have to work with
+    min_boarders = [image_operators.min_distance_to_border(image, circle) for image, circle in circle_data.values()]
+    min_boarder = min(min_boarders)
+    logger.info(f"Using minimum relative border: {min_boarder}")
+
+    min_radius = min(circle[2] for _, circle in circle_data.values())
+    logger.info(f"Using minimum radius: {min_radius}")
+
     
     # Step 3: Process images with detected circles
     processed_count = 0
     failed_count = 0
+    unified_width = 400
     
     for image_file, (image, circle) in circle_data.items():
         try:
             # Center and crop the image with consistent relative circle size and unified output width
-            processed_image = image_operators.center_and_crop_image_relative(image, circle, max_ratio, unified_width)
+            processed_image = image_operators.center_and_crop_image_consistent(image, circle, 1)
+
+            # scaled_image = image_operators.scale_image(processed_image, unified_width)
+            scaled_image = processed_image
             
             # Save the processed image
             output_path = output_dir.get() / image_file.name
-            cv2.imwrite(str(output_path), processed_image)
+            cv2.imwrite(str(output_path), scaled_image)
             logger.info(f"Successfully processed {image_file} -> {output_path}")
             processed_count += 1
             
@@ -115,7 +111,6 @@ def process_images(input_path: str, output_path: str) -> dict:
         "processed": processed_count,
         "failed": failed_count,
         "no_circles": no_circles_count,
-        "max_ratio": max_ratio,
         "unified_width": unified_width
     }
     

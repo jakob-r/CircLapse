@@ -3,12 +3,12 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple
 import logging
-from circelizer import settings
+from circelizer import image_operators, settings
 from circelizer.context import output_dir
 
 logger = logging.getLogger(__name__)
 
-def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800) -> Optional[Tuple[int, int, int]]:
+def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Optional[Tuple[int, int, int]]:
     """
     Detect the largest circle in the image.
     
@@ -39,21 +39,26 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
     
     # Detect circles using Hough Circle Transform
     # Parameters optimized for ~800px images
-    circles = cv2.HoughCircles(
+    circles_raw = cv2.HoughCircles(
         blurred,
         cv2.HOUGH_GRADIENT,
         dp=1,
-        minDist=80,   # Minimum distance between circles
-        param1=25,    # Edge detection threshold
+        minDist=100,   # Minimum distance between circles
+        param1=30,    # Edge detection threshold
         param2=70,    # Accumulator threshold - adjusted for scaled images
-        minRadius=shortest_side // 8, # Minimum radius - adjusted for scaled images
+        minRadius=shortest_side // 6, # Minimum radius - adjusted for scaled images
         maxRadius=shortest_side // 2 # Maximum radius - adjusted for scaled images
     )
+
+    circles = circles_raw
     
     if circles is not None:
         circles = np.round(circles[0, :]).astype("int")
         
-        # Save debug image if DEBUG is enabled
+        # Return the largest circle (assuming it's the main object)
+        largest_circle = max(circles, key=lambda x: x[2])
+
+                # Save debug image if DEBUG is enabled
         if settings.DEBUG:
             debug_image = image.copy()
             for (x, y, radius) in circles:
@@ -61,15 +66,15 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
                 cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
                 # Draw center point
                 cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
+
+            # draw biggest circle
+            cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 2)
             
             # Save debug image if output directory is available
             debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"
             debug_path.parent.mkdir(parents=True, exist_ok=True)
             cv2.imwrite(str(debug_path), debug_image)
             logger.debug(f"Saved debug image: {debug_path}")
-        
-        # Return the largest circle (assuming it's the main object)
-        largest_circle = max(circles, key=lambda x: x[2])
         
         # Scale coordinates back to original image size if image was scaled
         if scale_factor < 1.0:

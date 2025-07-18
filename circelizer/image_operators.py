@@ -40,7 +40,7 @@ def center_and_crop_image(image: np.ndarray, circle: Tuple[int, int, int]) -> np
     return cropped
 
 
-def center_and_crop_image_consistent(image: np.ndarray, circle: Tuple[int, int, int], target_radius: int) -> np.ndarray:
+def center_and_crop_image_consistent(image: np.ndarray, circle: Tuple[int, int, int], target_circle_share: float) -> np.ndarray:
     """
     Center the image on the detected circle and crop to a square with a consistent radius.
     Scales the image so that all circles have the same size in the output.
@@ -48,96 +48,20 @@ def center_and_crop_image_consistent(image: np.ndarray, circle: Tuple[int, int, 
     Args:
         image: Input image
         circle: Tuple of (x, y, radius) of the detected circle
-        target_radius: The desired radius for the cropped image
+        target_circle_share: How much of the image should be used for the circle. 1 means all the image is used for the circle.
         
     Returns:
-        Centered and cropped square image with consistent radius
+        The image with a circle of the target radius and the target ratio
     """
     x, y, radius = circle
-    height, width = image.shape[:2]
-    
-    # Calculate scale factor to make this circle match the target radius
-    scale_factor = target_radius / radius
-    
-    # Scale the image and circle coordinates
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    new_x = int(x * scale_factor)
-    new_y = int(y * scale_factor)
-    
-    # Resize the image
-    scaled_image = cv2.resize(image, (new_width, new_height))
-    
-    # Calculate crop size (2 * target_radius + padding)
-    crop_size = min(2 * target_radius + 50, min(new_width, new_height))
-    
-    # Calculate crop boundaries to center the circle
-    crop_x = max(0, min(new_x - crop_size // 2, new_width - crop_size))
-    crop_y = max(0, min(new_y - crop_size // 2, new_height - crop_size))
-    
-    # Ensure we don't go out of bounds
-    crop_x = max(0, min(crop_x, new_width - crop_size))
-    crop_y = max(0, min(crop_y, new_height - crop_size))
-    
-    # Crop the image
-    cropped = scaled_image[crop_y:crop_y + crop_size, crop_x:crop_x + crop_size]
-    
-    return cropped
 
+    # if the radius is 100, the circle_share is 0.8, the image has to be 100 * 1/0.8 big
+    final_shortest_side = int(radius / target_circle_share) * 2
 
-def center_and_crop_image_relative(image: np.ndarray, circle: Tuple[int, int, int], max_ratio: float, unified_width: int) -> np.ndarray:
-    """
-    Center the image on the detected circle and crop to show the same relative amount of the circle.
-    Uses the maximum radius-to-image-size ratio to determine how much of each circle to show.
-    Ensures all output images have the same unified width.
+    crop_x = x - (final_shortest_side // 2)
+    crop_y = y - (final_shortest_side // 2)
     
-    Args:
-        image: Input image
-        circle: Tuple of (x, y, radius) of the detected circle
-        max_ratio: The maximum radius-to-image-size ratio found across all images
-        unified_width: The minimum shortest side length to use as output width
-        
-    Returns:
-        Centered and cropped square image showing consistent relative circle size with unified dimensions
-    """
-    x, y, radius = circle
-    height, width = image.shape[:2]
-    shortest_side = min(height, width)
-    
-    # Calculate the target radius for this image based on the max ratio
-    target_radius = int(shortest_side * max_ratio)
-    
-    # Calculate scale factor to make this circle match the target radius
-    scale_factor = target_radius / radius
-    
-    # Scale the image and circle coordinates
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    new_x = int(x * scale_factor)
-    new_y = int(y * scale_factor)
-    
-    # Resize the image
-    scaled_image = cv2.resize(image, (new_width, new_height))
-    
-    # Calculate crop size to show the target radius with some padding, but ensure it doesn't exceed unified_width
-    crop_size = min(2 * target_radius + 50, min(new_width, new_height), unified_width)
-    
-    # Calculate crop boundaries to center the circle
-    crop_x = max(0, min(new_x - crop_size // 2, new_width - crop_size))
-    crop_y = max(0, min(new_y - crop_size // 2, new_height - crop_size))
-    
-    # Ensure we don't go out of bounds
-    crop_x = max(0, min(crop_x, new_width - crop_size))
-    crop_y = max(0, min(crop_y, new_height - crop_size))
-    
-    # Crop the image
-    cropped = scaled_image[crop_y:crop_y + crop_size, crop_x:crop_x + crop_size]
-    
-    # Resize to unified width if necessary
-    if cropped.shape[0] != unified_width or cropped.shape[1] != unified_width:
-        cropped = cv2.resize(cropped, (unified_width, unified_width))
-    
-    return cropped
+    return image[crop_y:crop_y + final_shortest_side, crop_x:crop_x + final_shortest_side]
 
 
 def output_width(shortest_sides: list[int]) -> int:
@@ -151,3 +75,93 @@ def output_width(shortest_sides: list[int]) -> int:
         The minimum shortest side length to use as output width
     """
     return min(shortest_sides)
+
+
+def scale_image(image: np.ndarray, target_width: int) -> np.ndarray:
+    """
+    Scale an image to a target width while maintaining aspect ratio.
+    
+    Args:
+        image: Input image
+        target_width: The desired width for the output image
+        
+    Returns:
+        Scaled image with the target width
+    """
+    height, width = image.shape[:2]
+    
+    # Calculate scale factor to achieve target width
+    scale_factor = target_width / width
+    
+    # Calculate new height to maintain aspect ratio
+    new_height = int(height * scale_factor)
+    
+    # Resize the image
+    scaled_image = cv2.resize(image, (target_width, new_height))
+    
+    return scaled_image
+
+
+def min_distance_to_border(image: np.ndarray, circle: tuple[int, int, int]) -> int:
+    """
+    Calculate the minimum distance from the circle's edge to the image border.
+    
+    Args:
+        image: Input image
+        circle: Tuple of (x, y, radius) of the detected circle
+        
+    Returns:
+        Minimum distance from circle edge to image border, normalized to the shortest side of the image
+    """
+    x, y, radius = circle
+    height, width = image.shape[:2]
+    shortest_side = min(height, width)
+    
+    # Calculate distances to each border
+    distance_to_left = x - radius
+    distance_to_right = width - (x + radius)
+    distance_to_top = y - radius
+    distance_to_bottom = height - (y + radius)
+    
+    # Return the minimum distance
+    return min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom)/shortest_side
+
+
+def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
+    """
+    Crop an image with out-of-bounds support, filling with black pixels.
+    
+    Args:
+        image: Input image
+        x: Starting x coordinate (can be negative)
+        y: Starting y coordinate (can be negative)
+        width: Width of the crop region
+        height: Height of the crop region
+        
+    Returns:
+        Cropped image with black padding for out-of-bounds areas
+    """
+    img_height, img_width = image.shape[:2]
+    channels = image.shape[2] if len(image.shape) > 2 else 1
+    
+    # Create output image filled with black
+    output = np.zeros((height, width, channels), dtype=image.dtype)
+    
+    # Calculate the actual crop region within the image bounds
+    crop_x_start = max(0, x)
+    crop_y_start = max(0, y)
+    crop_x_end = min(img_width, x + width)
+    crop_y_end = min(img_height, y + height)
+    
+    # Calculate the corresponding region in the output image
+    output_x_start = max(0, -x)
+    output_y_start = max(0, -y)
+    output_x_end = output_x_start + (crop_x_end - crop_x_start)
+    output_y_end = output_y_start + (crop_y_end - crop_y_start)
+    
+    # Copy the valid region from input to output
+    if crop_x_start < crop_x_end and crop_y_start < crop_y_end:
+        output[output_y_start:output_y_end, output_x_start:output_x_end] = \
+            image[crop_y_start:crop_y_end, crop_x_start:crop_x_end]
+    
+    return output
