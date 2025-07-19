@@ -34,15 +34,21 @@ def main():
         help="Path to directory where processed images will be saved"
     )
     parser.add_argument(
+        "--output-format",
+        choices=['jpg', 'gif'],
+        default='jpg',
+        help="Output format to use (default: jpg)"
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose logging"
     )
     parser.add_argument(
         "--detection-method",
-        choices=['hough', 'contour', 'ransac', 'gradient'],
+        choices=['hough', 'ellipse'],
         default='hough',
-        help="Circle detection method to use (default: hough)"
+        help="Circle detection method to use (default: hough). 'ellipse' detects ellipses and transforms them to circles."
     )
     parser.add_argument(
         "--debug",
@@ -62,7 +68,7 @@ def main():
     
     try:
         # Process images
-        stats = process_images(args.input_path, args.output_path)
+        stats = process_images(args.input_path, args.output_path, args.output_format)
         
         # Print summary
         print(f"\nProcessing Summary:")

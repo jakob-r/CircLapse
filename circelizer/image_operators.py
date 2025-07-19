@@ -64,7 +64,7 @@ def center_and_crop_image_consistent(image: np.ndarray, circle: Tuple[int, int, 
     return image[crop_y:crop_y + final_shortest_side, crop_x:crop_x + final_shortest_side]
 
 
-def output_width(shortest_sides: list[int]) -> int:
+def output_width(images: list[np.ndarray]) -> int:
     """
     Calculate the unified output width based on all shortest sides.
     
@@ -72,9 +72,10 @@ def output_width(shortest_sides: list[int]) -> int:
         shortest_sides: List of shortest side lengths from all images
         
     Returns:
-        The minimum shortest side length to use as output width
+        A output width that downscales most images to a similar size but allows some upscaling.
     """
-    return min(shortest_sides)
+    all_shortest_sides = [min(image.shape[:2]) for image in images]
+    return int(np.percentile(all_shortest_sides, 10))
 
 
 def scale_image(image: np.ndarray, target_width: int) -> np.ndarray:

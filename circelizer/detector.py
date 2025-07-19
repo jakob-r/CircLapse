@@ -5,10 +5,13 @@ from typing import Optional, Tuple, List
 import logging
 from circelizer import image_operators, settings
 from circelizer.context import output_dir
+from skimage.transform import hough_ellipse
+from skimage.draw import ellipse_perimeter
+from skimage.feature import canny
 
 logger = logging.getLogger(__name__)
 
-def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Optional[Tuple[int, int, int]]:
+def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
     """
     Detect the largest circle in the image using Hough Circle Transform.
     
@@ -16,24 +19,25 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         image: Input image as numpy array
         image_name: Name for debug image (used when DEBUG=True)
         target_size: Target size for the longest side (default: 800px)
+        min_distance_to_border: Minimum distance from border as fraction of image size
         
     Returns:
-        Tuple of (x, y, radius) of the detected circle, or None if no circle found
+        Tuple of (processed_image, circle_coords) where circle_coords is (x, y, radius) or None
     """
     # Scale image to consistent size for better circle detection
-    image = image.copy()
-    height, width = image.shape[:2]
+    processed_image = image.copy()
+    height, width = processed_image.shape[:2]
     scale_factor = target_size / max(height, width)
     
     # scale image to target size
     new_width = int(width * scale_factor)
     new_height = int(height * scale_factor)
     shortest_side = min(new_width, new_height)
-    image = cv2.resize(image, (new_width, new_height))
+    processed_image = cv2.resize(processed_image, (new_width, new_height))
     logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
     
     # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(processed_image, cv2.COLOR_BGR2GRAY)
     
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
@@ -57,12 +61,12 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         circles = np.round(circles[0, :]).astype("int")
 
         # filter out circles too close to the border
-        circle_shares = [image_operators.circle_share(image, circle) for circle in circles]
+        circle_shares = [image_operators.circle_share(processed_image, circle) for circle in circles]
         too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
         small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
         if len(small_circles) == 0:
             logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
-            return None
+            return image, None
         
         big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
         
@@ -106,14 +110,14 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         original_x = int(x / scale_factor)
         original_y = int(y / scale_factor)
         original_radius = int(radius / scale_factor)
-        return (original_x, original_y, original_radius)
+        return (image, (original_x, original_y, original_radius))
     
-    return None
+    return image, None
 
 
-def detect_circle_contour_based(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Optional[Tuple[int, int, int]]:
+def detect_ellipse_and_transform(image: np.ndarray, image_name: str = "debug", target_size: int = 256, min_distance_to_border: float = 0.05) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
     """
-    Detect circles using contour detection and ellipse fitting - more robust than Hough transform.
+    Detect the largest ellipse in the image using Hough Ellipse Transform and transform it to a circle.
     
     Args:
         image: Input image as numpy array
@@ -122,315 +126,132 @@ def detect_circle_contour_based(image: np.ndarray, image_name: str = "debug", ta
         min_distance_to_border: Minimum distance from border as fraction of image size
         
     Returns:
-        Tuple of (x, y, radius) of the detected circle, or None if no circle found
+        Tuple of (transformed_image, circle_coords) where circle_coords is (x, y, radius) or None
     """
-    # Scale image to consistent size
-    image = image.copy()
-    height, width = image.shape[:2]
+    # Scale image to consistent size for better ellipse detection
+    processed_image = image.copy()
+    height, width = processed_image.shape[:2]
     scale_factor = target_size / max(height, width)
     
+    # scale image to target size
     new_width = int(width * scale_factor)
     new_height = int(height * scale_factor)
     shortest_side = min(new_width, new_height)
-    image = cv2.resize(image, (new_width, new_height))
+    processed_image = cv2.resize(processed_image, (new_width, new_height))
+    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
     
     # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(processed_image, cv2.COLOR_BGR2GRAY)
     
-    # Apply adaptive thresholding for better edge detection
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+    # Detect edges using Canny
+    edges = canny(gray, sigma=2.0, low_threshold=0.55, high_threshold=0.8)
     
-    # Morphological operations to clean up the image
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    # Detect ellipses using Hough Ellipse Transform
+
+    logger.info(f"Detecting ellipses with accuracy: {16} on picture of size {edges.shape}")
+    ellipses = hough_ellipse(
+        edges, accuracy=20, threshold=250, min_size=100, max_size=120
+    )
+    if len(ellipses) == 0:
+        logger.info("No ellipses found. Returning None.")
+        return image, None
     
-    # Find contours
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ellipses.sort(order='accumulator')
+
+    best = list(ellipses[-1])
+    yc, xc, a, b = (int(round(x)) for x in best[1:5])
+    orientation = best[5]
+
+    # Draw the ellipse on the original image
     
-    circles = []
-    min_radius = shortest_side // 8
-    max_radius = shortest_side // 2
-    
-    for contour in contours:
-        # Filter by contour area
-        area = cv2.contourArea(contour)
-        if area < np.pi * min_radius**2 or area > np.pi * max_radius**2:
-            continue
-            
-        # Fit ellipse to contour
-        if len(contour) >= 5:  # Need at least 5 points for ellipse fitting
-            try:
-                ellipse = cv2.fitEllipse(contour)
-                center, axes, angle = ellipse
-                
-                # Check if it's approximately circular (axes are similar)
-                major_axis = max(axes)
-                minor_axis = min(axes)
-                aspect_ratio = minor_axis / major_axis
-                
-                if aspect_ratio > 0.7:  # Allow some deviation from perfect circle
-                    radius = int((major_axis + minor_axis) / 4)  # Average radius
-                    x, y = int(center[0]), int(center[1])
-                    
-                    # Check distance to border
-                    circle_share = image_operators.circle_share(image, (x, y, radius))
-                    if circle_share <= (1 - min_distance_to_border):
-                        circles.append((x, y, radius))
-            except:
-                continue
-    
-    if not circles:
-        return None
-    
-    # Return the largest circle
-    largest_circle = max(circles, key=lambda x: x[2])
-    
-    # Debug visualization
+
     if settings.DEBUG:
-        debug_image = image.copy()
-        for (x, y, radius) in circles:
-            cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
-            cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
-        
-        cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 3)
-        cv2.putText(debug_image, f"Contour-based detection", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        
-        debug_path = output_dir.get() / "debug" / f"{image_name}_contour_circles.jpg"
+        debug_image = processed_image.copy()
+        for ellipse in ellipses:
+            yc, xc, a, b = (int(round(x)) for x in list(ellipse)[1:5])
+            orientation = ellipse[5]
+            cy, cx = ellipse_perimeter(yc, xc, a, b, orientation)
+            # bound the ellipse to the image
+            cy = np.clip(cy, 0, debug_image.shape[0] - 1)
+            cx = np.clip(cx, 0, debug_image.shape[1] - 1)
+            debug_image[cy, cx] = (0, 0, 255)
+            
+        debug_path = output_dir.get() / "debug" / f"{image_name}_ellipses.jpg"
         debug_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(debug_path), debug_image)
+        logger.debug(f"Saved debug image: {debug_path}")
+
+        
+        # Use the largest valid ellipse
+    largest_ellipse = best
+    center_y, center_x, a, b = (int(round(x)) for x in best[1:5])
+    orientation = best[5]
+
+    # Transform the image so the ellipse becomes a circle
+    transformed_image = transform_ellipse_to_circle(image, largest_ellipse)
     
-    # Scale back to original size
-    x, y, radius = largest_circle
-    original_x = int(x / scale_factor)
-    original_y = int(y / scale_factor)
+    # Calculate the radius of the resulting circle (average of a and b)
+    radius = int((a + b) / 2)
+    
+    # Scale coordinates back to original image size
+    original_x = int(center_x / scale_factor)
+    original_y = int(center_y / scale_factor)
     original_radius = int(radius / scale_factor)
-    return (original_x, original_y, original_radius)
+    
+    return transformed_image, (original_x, original_y, original_radius)
+    
 
-
-def detect_circle_ransac(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Optional[Tuple[int, int, int]]:
+def transform_ellipse_to_circle(image: np.ndarray, ellipse: tuple) -> np.ndarray:
     """
-    Detect circles using RANSAC-based circle fitting - robust to outliers.
+    Transform an image so that the detected ellipse becomes a circle.
     
     Args:
-        image: Input image as numpy array
-        image_name: Name for debug image (used when DEBUG=True)
-        target_size: Target size for the longest side (default: 800px)
-        min_distance_to_border: Minimum distance from border as fraction of image size
+        image: Input image
+        ellipse: Ellipse parameters (center_y, center_x, a, b, orientation)
         
     Returns:
-        Tuple of (x, y, radius) of the detected circle, or None if no circle found
+        Transformed image with the ellipse converted to a circle
     """
-    # Scale image to consistent size
-    image = image.copy()
+    center_y, center_x, a, b = ellipse[1:5]
+    orientation = ellipse[5]
+    
+    # Calculate the aspect ratio of the ellipse
+    aspect_ratio = a / b if b > 0 else 1.0
+    
+    # Create transformation matrix
+    # First, translate to center the ellipse
+    translation_matrix = np.array([
+        [1, 0, -center_x],
+        [0, 1, -center_y],
+        [0, 0, 1]
+    ])
+    
+    # Rotate to align with axes
+    rotation_matrix = np.array([
+        [np.cos(-orientation), -np.sin(-orientation), 0],
+        [np.sin(-orientation), np.cos(-orientation), 0],
+        [0, 0, 1]
+    ])
+    
+    # Scale to make it circular
+    scale_matrix = np.array([
+        [1, 0, 0],
+        [0, aspect_ratio, 0],
+        [0, 0, 1]
+    ])
+    
+    # Combine transformations
+    transform_matrix = scale_matrix @ rotation_matrix @ translation_matrix
+    
+    # Apply transformation
     height, width = image.shape[:2]
-    scale_factor = target_size / max(height, width)
+    transformed_image = cv2.warpAffine(
+        image, 
+        transform_matrix[:2, :], 
+        (width, height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=(0, 0, 0)
+    )
     
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
-    image = cv2.resize(image, (new_width, new_height))
-    
-    # Convert to grayscale and detect edges
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 50, 150)
-    
-    # Find edge points
-    edge_points = np.column_stack(np.where(edges > 0))
-    if len(edge_points) < 10:
-        return None
-    
-    # RANSAC parameters
-    max_iterations = 100
-    min_inliers = 20
-    threshold = 3.0
-    min_radius = shortest_side // 8
-    max_radius = shortest_side // 2
-    
-    best_circle = None
-    best_inliers = 0
-    
-    for _ in range(max_iterations):
-        # Randomly sample 3 points
-        if len(edge_points) < 3:
-            break
-            
-        indices = np.random.choice(len(edge_points), 3, replace=False)
-        p1, p2, p3 = edge_points[indices]
-        
-        # Calculate circle from 3 points
-        try:
-            # Convert to float for better precision
-            p1, p2, p3 = p1.astype(float), p2.astype(float), p3.astype(float)
-            
-            # Calculate perpendicular bisectors
-            mid1 = (p1 + p2) / 2
-            mid2 = (p2 + p3) / 2
-            
-            # Direction vectors
-            dir1 = p2 - p1
-            dir2 = p3 - p2
-            
-            # Perpendicular vectors
-            perp1 = np.array([-dir1[1], dir1[0]])
-            perp2 = np.array([-dir2[1], dir2[0]])
-            
-            # Normalize
-            perp1 = perp1 / np.linalg.norm(perp1)
-            perp2 = perp2 / np.linalg.norm(perp2)
-            
-            # Solve for center (intersection of perpendicular bisectors)
-            A = np.vstack([perp1, -perp2])
-            b = np.array([np.dot(perp1, mid1), np.dot(perp2, mid2)])
-            
-            center = np.linalg.solve(A, b)
-            radius = np.linalg.norm(center - p1)
-            
-            # Check radius constraints
-            if min_radius <= radius <= max_radius:
-                # Count inliers
-                distances = np.abs(np.linalg.norm(edge_points - center, axis=1) - radius)
-                inliers = np.sum(distances < threshold)
-                
-                if inliers > best_inliers and inliers >= min_inliers:
-                    best_inliers = inliers
-                    best_circle = (int(center[1]), int(center[0]), int(radius))
-                    
-        except (np.linalg.LinAlgError, ValueError):
-            continue
-    
-    if best_circle is None:
-        return None
-    
-    # Check distance to border
-    circle_share = image_operators.circle_share(image, best_circle)
-    if circle_share > (1 - min_distance_to_border):
-        return None
-    
-    # Debug visualization
-    if settings.DEBUG:
-        debug_image = image.copy()
-        cv2.circle(debug_image, (best_circle[0], best_circle[1]), best_circle[2], (0, 255, 0), 2)
-        cv2.circle(debug_image, (best_circle[0], best_circle[1]), 2, (0, 0, 255), 3)
-        cv2.putText(debug_image, f"RANSAC detection (inliers: {best_inliers})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        
-        debug_path = output_dir.get() / "debug" / f"{image_name}_ransac_circles.jpg"
-        debug_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(debug_path), debug_image)
-    
-    # Scale back to original size
-    x, y, radius = best_circle
-    original_x = int(x / scale_factor)
-    original_y = int(y / scale_factor)
-    original_radius = int(radius / scale_factor)
-    return (original_x, original_y, original_radius)
-
-
-def detect_circle_gradient_based(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Optional[Tuple[int, int, int]]:
-    """
-    Detect circles using gradient-based approach - more robust than Hough transform.
-    
-    Args:
-        image: Input image as numpy array
-        image_name: Name for debug image (used when DEBUG=True)
-        target_size: Target size for the longest side (default: 800px)
-        min_distance_to_border: Minimum distance from border as fraction of image size
-        
-    Returns:
-        Tuple of (x, y, radius) of the detected circle, or None if no circle found
-    """
-    # Scale image to consistent size
-    image = image.copy()
-    height, width = image.shape[:2]
-    scale_factor = target_size / max(height, width)
-    
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
-    image = cv2.resize(image, (new_width, new_height))
-    
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Calculate gradients
-    grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-    
-    # Calculate gradient magnitude and direction
-    magnitude = np.sqrt(grad_x**2 + grad_y**2)
-    direction = np.arctan2(grad_y, grad_x)
-    
-    # Threshold gradient magnitude
-    threshold = np.percentile(magnitude, 80)
-    edge_mask = magnitude > threshold
-    
-    # Parameters for circle detection
-    min_radius = shortest_side // 8
-    max_radius = shortest_side // 2
-    radius_step = target_size // 100
-    
-    best_circle = None
-    best_score = 0
-    
-    # Search for circles using gradient information
-    for radius in range(min_radius, max_radius, radius_step):
-        # Create circle template
-        y_coords, x_coords = np.ogrid[:new_height, :new_width]
-        
-        for center_y in range(radius, new_height - radius, 5):
-            for center_x in range(radius, new_width - radius, 5):
-                # Calculate circle points
-                circle_mask = (x_coords - center_x)**2 + (y_coords - center_y)**2 <= radius**2
-                circle_edge = (x_coords - center_x)**2 + (y_coords - center_y)**2 <= (radius + 2)**2
-                circle_edge = circle_edge & ~((x_coords - center_x)**2 + (y_coords - center_y)**2 <= (radius - 2)**2)
-                
-                # Calculate score based on gradient alignment
-                if np.sum(circle_edge) > 0:
-                    # Get gradient directions at circle edge
-                    edge_points = np.where(circle_edge & edge_mask)
-                    if len(edge_points[0]) > 10:
-                        scores = []
-                        for i in range(len(edge_points[0])):
-                            y, x = edge_points[0][i], edge_points[1][i]
-                            # Expected gradient direction (radial)
-                            expected_dir = np.arctan2(y - center_y, x - center_x)
-                            actual_dir = direction[y, x]
-                            
-                            # Calculate alignment score
-                            angle_diff = abs(expected_dir - actual_dir)
-                            angle_diff = min(angle_diff, 2*np.pi - angle_diff)
-                            score = np.cos(angle_diff)
-                            scores.append(score)
-                        
-                        avg_score = np.mean(scores)
-                        if avg_score > best_score:
-                            best_score = avg_score
-                            best_circle = (center_x, center_y, radius)
-    
-    if best_circle is None or best_score < 0.3:  # Minimum score threshold
-        return None
-    
-    # Check distance to border
-    circle_share = image_operators.circle_share(image, best_circle)
-    if circle_share > (1 - min_distance_to_border):
-        return None
-    
-    # Debug visualization
-    if settings.DEBUG:
-        debug_image = image.copy()
-        cv2.circle(debug_image, (best_circle[0], best_circle[1]), best_circle[2], (0, 255, 0), 2)
-        cv2.circle(debug_image, (best_circle[0], best_circle[1]), 2, (0, 0, 255), 3)
-        cv2.putText(debug_image, f"Gradient-based detection (score: {best_score:.2f})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        
-        debug_path = output_dir.get() / "debug" / f"{image_name}_gradient_circles.jpg"
-        debug_path.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(debug_path), debug_image)
-    
-    # Scale back to original size
-    x, y, radius = best_circle
-    original_x = int(x / scale_factor)
-    original_y = int(y / scale_factor)
-    original_radius = int(radius / scale_factor)
-    return (original_x, original_y, original_radius)
+    return transformed_image

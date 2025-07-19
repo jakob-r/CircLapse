@@ -59,15 +59,16 @@ def process_images(input_path: str, output_path: str, output_format: str = 'jpg'
             
             # Detect circle using configured method
             image_name = image_file.stem
-            method_name = settings.DETECTION_METHODS[settings.DETECTION_METHOD]
-            method_func = getattr(detector, method_name)
-            circle = method_func(image, image_name)
+            if settings.DETECTION_METHOD == 'ellipse':
+                res_image, circle = detector.detect_ellipse_and_transform(image, image_name)
+            else:
+                res_image, circle = detector.detect_circle(image, image_name)
             
             if circle is None:
                 logger.warning(f"No circle detected in {image_file}")
                 no_circles_count += 1
             else:
-                circle_data[image_file] = (image, circle)
+                circle_data[image_file] = (res_image, circle)
                 
         except Exception as e:
             logger.error(f"Error detecting circle in {image_file}: {repr(e)}")
@@ -86,7 +87,7 @@ def process_images(input_path: str, output_path: str, output_format: str = 'jpg'
     processed_images = []
     processed_filenames = []
     failed_count = 0
-    unified_width = 400
+    unified_width = image_operators.output_width(images = [image for image, _ in circle_data.values()])
     
     for image_file, (image, circle) in circle_data.items():
         try:

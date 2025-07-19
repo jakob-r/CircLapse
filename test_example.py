@@ -15,8 +15,8 @@ def test_circelizer():
     
     # Create temporary directories for testing
     with tempfile.TemporaryDirectory() as temp_dir:
-        input_dir = Path('./example_in')
-        output_dir = Path('./example_out')
+        input_dir = Path('./examples/example_in')
+        output_dir = Path('./examples/example_out')
         
         try:
             stats = process_images(str(input_dir), str(output_dir), 'gif')

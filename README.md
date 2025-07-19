@@ -1,15 +1,17 @@
 # Circelizer
 
-A Python library for detecting circles in images (like manhole covers), centering them, and cropping to square format.
+A Python library for detecting circles and ellipses in images (like manhole covers), centering them, and cropping to square format.
 
 ## Features
 
-- 🔍 **Advanced Circle Detection**: Multiple state-of-the-art detection methods including Hough Transform, Contour-based, RANSAC, and Gradient-based approaches
-- 🎯 **Auto-centering**: Automatically centers the detected circle in the image
-- ✂️ **Square Cropping**: Crops images to square format with the circle centered
+- 🔍 **Circle Detection**: Uses openCV circle detection.
+- 🔄 **Ellipse Detection**: Uses scikit-image Hough ellipse detection with automatic transformation to circles.
+- 🎯 **Auto-scaling**
+ * All circles will have the same size.
+ * Crops the picture as little as possible.
+ * Output resolution unified to ensure as little as possible upscaling.
 - 📁 **Batch Processing**: Process multiple images in a directory
 - 🖥️ **CLI Interface**: Easy-to-use command-line interface with method selection
-- 🧪 **Ensemble Detection**: Combines multiple methods for maximum reliability
 
 ## Installation
 
@@ -26,126 +28,30 @@ uv sync
 
 ## Usage
 
-### Command Line Interface
+After installation, you can use circelizer from the command line:
 
-The easiest way to use circelizer is through the command-line interface:
-
-```bash
-# Process all JPG images in a directory
-circelizer /path/to/input/images /path/to/output/directory
-
-# With verbose logging
-circelizer -v /path/to/input/images /path/to/output/directory
-```
-
-### Python API
-
-You can also use the library programmatically:
-
-```python
-from circelizer import process_images
-
-# Process all images in a directory
-stats = process_images("/path/to/input", "/path/to/output")
-print(f"Processed {stats['processed']} out of {stats['total']} images")
-```
-
-### Example Script
-
-```python
-#!/usr/bin/env python3
-import sys
-from circelizer import process_images
-
-def main():
-    if len(sys.argv) != 3:
-        print("Usage: python main.py <input_path> <output_path>")
-        sys.exit(1)
-    
-    input_path = sys.argv[1]
-    output_path = sys.argv[2]
-    
-    stats = process_images(input_path, output_path)
-    print(f"Processing complete: {stats}")
-
-if __name__ == "__main__":
-    main()
-```
-
-## How It Works
-
-1. **Image Scanning**: Recursively finds all JPG images in the input directory
-2. **Circle Detection**: Uses one of several state-of-the-art detection methods:
-   - **Hough Transform**: Fast detection for clean images
-   - **Contour-based**: Robust detection for imperfect circles
-   - **RANSAC**: Statistical approach for noisy images
-   - **Gradient-based**: Advanced detection using gradient information
-   - **Ensemble**: Combines all methods for maximum reliability
-3. **Centering**: Calculates the optimal crop area to center the detected circle
-4. **Cropping**: Crops the image to a square format with the circle centered
-5. **Saving**: Saves the processed image to the output directory
-
-## Detection Methods
-
-### Hough Transform (hough)
-- **Best for**: Clean images with well-defined circles
-- **Speed**: Fast
-- **Robustness**: Low
-
-### Contour-based (contour)
-- **Best for**: Imperfect circles, ellipses, moderate noise
-- **Speed**: Medium
-- **Robustness**: Medium
-
-### RANSAC (ransac)
-- **Best for**: Noisy images, partial circles, outliers
-- **Speed**: Slow
-- **Robustness**: High
-
-### Gradient-based (gradient)
-- **Best for**: Subtle circular features, weak edges
-- **Speed**: Very slow
-- **Robustness**: Medium
-
-### Ensemble (ensemble) - Default
-- **Best for**: Critical applications requiring maximum reliability
-- **Speed**: Slowest
-- **Robustness**: Highest
-
-## Supported Image Formats
-
-- JPG/JPEG (case-insensitive)
-- Images are automatically converted to JPG format in the output
-
-## Requirements
-
-- Python 3.13+
-- OpenCV (opencv-python)
-- NumPy
-- Pillow
-
-## Development
-
-To set up the development environment:
+### Basic Usage
 
 ```bash
-# Install development dependencies
-uv sync --extra dev
-
-# Run tests (when implemented)
-pytest
-
-# Format code
-black .
-
-# Lint code
-flake8
+uv run python -m circelizer.cli examples/example_in examples/example_out
 ```
 
-## License
+### Detection Methods
 
-[Add your license here]
+Circelizer supports multiple detection methods:
 
-## Contributing
+- `hough` (default): OpenCV Hough circle detection
+- `ellipse`: Scikit-image Hough ellipse detection with automatic transformation to circles
+- `contour`: Contour-based circle detection
+- `ransac`: RANSAC-based circle detection
+- `gradient`: Gradient-based circle detection
 
-[Add contribution guidelines here]
+Example with ellipse detection:
+```bash
+uv run python -m circelizer.cli examples/example_in examples/example_out --detection-method ellipse
+```
+
+For more commands check
+```bash
+uv run  python -m circelizer.cli
+```
