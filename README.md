@@ -55,3 +55,8 @@ For more commands check
 ```bash
 uv run  python -m circelizer.cli
 ```
+
+
+## Disclaimer
+
+This is a hobby project and most of the code is AI generated.
