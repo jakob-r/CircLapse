@@ -229,3 +229,37 @@ def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np
             image[crop_y_start:crop_y_end, crop_x_start:crop_x_end]
     
     return output
+
+
+def image_median_edges(edges: np.ndarray) -> tuple[int, int]:
+    """
+    Find the median point of edge pixels from Canny edge detection.
+    
+    This function calculates the point where 50% of edge pixels are to the right
+    and 50% of edge pixels are above this point.
+    
+    Args:
+        edges: Binary edge image from Canny edge detection (boolean or uint8 array)
+        
+    Returns:
+        Tuple of (x, y) coordinates representing the median point
+    """
+    # Ensure edges is boolean
+    if edges.dtype != bool:
+        edges = edges.astype(bool)
+    
+    # Find coordinates of all edge pixels
+    edge_coords = np.where(edges)
+    y_coords = edge_coords[0]  # Row coordinates
+    x_coords = edge_coords[1]  # Column coordinates
+    
+    if len(x_coords) == 0:
+        # No edges found, return center of image
+        height, width = edges.shape
+        return width // 2, height // 2
+    
+    # Calculate median x and y coordinates
+    median_x = int(np.median(x_coords))
+    median_y = int(np.median(y_coords))
+    
+    return median_x, median_y
