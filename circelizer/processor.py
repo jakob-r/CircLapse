@@ -96,8 +96,11 @@ def process_images(input_path: str, output_path: str, output_format: str = 'jpg'
 
             scaled_image = image_operators.scale_image(processed_image, unified_width)
             
+            # Apply automatic post-processing enhancements
+            enhanced_image = image_operators.automatic_postprocess(scaled_image)
+            
             # Collect processed images and filenames for batch saving
-            processed_images.append(scaled_image)
+            processed_images.append(enhanced_image)
             processed_filenames.append(image_file)
             
         except Exception as e:

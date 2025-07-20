@@ -117,6 +117,67 @@ def circle_share(image: np.ndarray, circle: tuple[int, int, int]) -> float:
     return radius / (radius + shortest_distance)
 
 
+def automatic_postprocess(image: np.ndarray) -> np.ndarray:
+    """
+    Apply automatic post-processing enhancements similar to Lightroom auto adjustments.
+    
+    This function applies:
+    - Automatic brightness and contrast adjustment
+    - Saturation enhancement
+    - Sharpness improvement
+    - Color balance optimization
+    
+    Args:
+        image: Input image (BGR format)
+        
+    Returns:
+        Enhanced image with improved visual quality
+    """
+    # Convert to LAB color space for better color processing
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+    
+    # 1. Automatic brightness and contrast adjustment using CLAHE
+    clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+    l_channel = clahe.apply(l_channel)
+    
+    # 2. Enhance contrast using histogram equalization on L channel
+    # Apply a subtle contrast enhancement
+    l_channel = cv2.convertScaleAbs(l_channel, alpha=1.05, beta=3)
+    
+    # 3. Enhance saturation in LAB space (more conservative)
+    a_channel = cv2.convertScaleAbs(a_channel, alpha=1.05, beta=0)
+    b_channel = cv2.convertScaleAbs(b_channel, alpha=1.05, beta=0)
+    
+    # Merge channels back
+    enhanced_lab = cv2.merge([l_channel, a_channel, b_channel])
+    enhanced_bgr = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+    
+    # 4. Apply unsharp masking for sharpness
+    gaussian = cv2.GaussianBlur(enhanced_bgr, (0, 0), 1.5)
+    sharpened = cv2.addWeighted(enhanced_bgr, 1.3, gaussian, -0.3, 0)
+    
+    # 5. Final color balance adjustment (more conservative)
+    # Convert to HSV for saturation and value adjustments
+    hsv = cv2.cvtColor(sharpened, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    
+    # Enhance saturation slightly (reduced from 1.1 to 1.05)
+    s = cv2.convertScaleAbs(s, alpha=1.05, beta=0)
+    
+    # Enhance value (brightness) slightly (reduced from 1.05 to 1.02)
+    v = cv2.convertScaleAbs(v, alpha=1.02, beta=0)
+    
+    # Merge and convert back to BGR
+    enhanced_hsv = cv2.merge([h, s, v])
+    final_image = cv2.cvtColor(enhanced_hsv, cv2.COLOR_HSV2BGR)
+    
+    # 6. Ensure values are in valid range
+    final_image = np.clip(final_image, 0, 255).astype(np.uint8)
+    
+    return final_image
+
+
 def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
     """
     Crop an image with out-of-bounds support, filling with black pixels.
