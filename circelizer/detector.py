@@ -11,7 +11,7 @@ from skimage.feature import canny
 
 logger = logging.getLogger(__name__)
 
-def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
+def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int = 800, min_distance_to_border: float = 0.05, max_iterations: int = 5) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
     """
     Detect the largest circle in the image using Hough Circle Transform.
     
@@ -20,6 +20,7 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
         image_name: Name for debug image (used when DEBUG=True)
         target_size: Target size for the longest side (default: 800px)
         min_distance_to_border: Minimum distance from border as fraction of image size
+        max_iterations: Maximum number of iterations to try lowering thresholds (default: 5)
         
     Returns:
         Tuple of (processed_image, circle_coords) where circle_coords is (x, y, radius) or None
@@ -42,77 +43,101 @@ def detect_circle(image: np.ndarray, image_name: str = "debug", target_size: int
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
     
-    # Detect circles using Hough Circle Transform
-    # Parameters optimized for ~800px images
-    circles_raw = cv2.HoughCircles(
-        blurred,
-        cv2.HOUGH_GRADIENT,
-        dp=1,
-        minDist=100,   # Minimum distance between circles
-        param1=30,    # Edge detection threshold
-        param2=100,    # Accumulator threshold - adjusted for scaled images
-        minRadius=shortest_side // 6, # Minimum radius - adjusted for scaled images
-        maxRadius=shortest_side // 2 # Maximum radius - adjusted for scaled images
-    )
-
-    circles = circles_raw
+    # Initial parameters for Hough Circle Transform
+    param1 = 30    # Edge detection threshold
+    param2 = 100   # Accumulator threshold
     
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-
-        # filter out circles too close to the border
-        circle_shares = [image_operators.circle_share(processed_image, circle) for circle in circles]
-        too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
-        small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
-        if len(small_circles) == 0:
-            logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
-            return image, None
+    # Try to detect circles with progressively lower thresholds
+    circles_raw = None
+    for iteration in range(max_iterations):
+        logger.debug(f"Circle detection iteration {iteration + 1}/{max_iterations} with param1={param1}, param2={param2}")
         
-        big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
+        circles_raw = cv2.HoughCircles(
+            blurred,
+            cv2.HOUGH_GRADIENT,
+            dp=1,
+            minDist=100,
+            param1=param1,
+            param2=param2,
+            minRadius=shortest_side // 6,
+            maxRadius=shortest_side // 2
+        )
         
-        # Return the largest circle (assuming it's the main object)
-        largest_circle = max(small_circles, key=lambda x: x[2])
-        max_circle_share = image_operators.circle_share(image, largest_circle)
-
-        # Save debug image if DEBUG is enabled
-        if settings.DEBUG:
-            debug_image = image.copy()
-            for (x, y, radius) in big_circles:
-                # Draw circle outline
-                cv2.circle(debug_image, (x, y), radius, (0, 0, 120), 2)
-                # Draw center point
-                cv2.circle(debug_image, (x, y), 2, (0, 0, 120), 3)
-            for (x, y, radius) in small_circles:
-                # Draw circle outline
-                cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
-                # Draw center point
-                cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
-
-            # draw biggest circle
-            cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 2)
-            cv2.putText(debug_image, f"Max circle share: {max_circle_share:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
-            # draw box centered on the largest circle
-            box_center = (largest_circle[0], largest_circle[1])
-            box_side = (2 * largest_circle[2]) / max_circle_share    
-            top_left = (int(box_center[0] - box_side // 2), int(box_center[1] - box_side // 2))
-            bottom_right = (int(box_center[0] + box_side // 2), int(box_center[1] + box_side // 2))
-            cv2.rectangle(debug_image, top_left, bottom_right, (255, 255, 255), 2)
-            
-            # Save debug image if output directory is available
-            debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"
-            debug_path.parent.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(debug_path), debug_image)
-            logger.debug(f"Saved debug image: {debug_path}")
+        if circles_raw is not None and len(circles_raw) > 0:
+            logger.debug(f"Found circles in iteration {iteration + 1}")
+            break
         
-        # Scale coordinates back to original image size if image was scaled
-        x, y, radius = largest_circle
-        original_x = int(x / scale_factor)
-        original_y = int(y / scale_factor)
-        original_radius = int(radius / scale_factor)
-        return (image, (original_x, original_y, original_radius))
+        # Lower thresholds for next iteration
+        param1 = max(10, int(param1 * 0.95))  # Don't go below 10
+        param2 = max(30, int(param2 * 0.95))  # Don't go below 30
+
     
-    return image, None
+    if circles_raw is None or len(circles_raw) == 0:
+        logger.info(f"No circles found after {max_iterations} iterations. Returning None.")
+        return image, None
+    
+    circles = np.round(circles_raw[0, :]).astype("int")
+
+    # filter out circles that are not centered in the middle 1/3rd of the image
+    x_center = processed_image.shape[1] // 2
+    y_center = processed_image.shape[0] // 2
+    x_range = (x_center - processed_image.shape[1] // 6, x_center + processed_image.shape[1] // 6)
+    y_range = (y_center - processed_image.shape[0] // 6, y_center + processed_image.shape[0] // 6)
+    circles = [circle for circle in circles if circle[0] > x_range[0] and circle[0] < x_range[1] and circle[1] > y_range[0] and circle[1] < y_range[1]]
+
+    # filter out circles too close to the border
+    circle_shares = [image_operators.circle_share(processed_image, circle) for circle in circles]
+    too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
+    small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
+    if len(small_circles) == 0:
+        logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
+        return image, None
+    
+    big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
+    
+    # Return the largest circle (assuming it's the main object)
+    largest_circle = max(small_circles, key=lambda x: x[2])
+    max_circle_share = image_operators.circle_share(image, largest_circle)
+
+    # Save debug image if DEBUG is enabled
+    if settings.DEBUG:
+        debug_image = processed_image.copy()
+        for (x, y, radius) in big_circles:
+            # Draw circle outline
+            cv2.circle(debug_image, (x, y), radius, (0, 0, 120), 2)
+            # Draw center point
+            cv2.circle(debug_image, (x, y), 2, (0, 0, 120), 3)
+        for (x, y, radius) in small_circles:
+            # Draw circle outline
+            cv2.circle(debug_image, (x, y), radius, (0, 255, 0), 2)
+            # Draw center point
+            cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
+
+        # draw biggest circle
+        cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 2)
+        cv2.putText(debug_image, f"Max circle share: {max_circle_share:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+        # draw box centered on the largest circle
+        box_center = (largest_circle[0], largest_circle[1])
+        box_side = (2 * largest_circle[2]) / max_circle_share    
+        top_left = (int(box_center[0] - box_side // 2), int(box_center[1] - box_side // 2))
+        bottom_right = (int(box_center[0] + box_side // 2), int(box_center[1] + box_side // 2))
+        cv2.rectangle(debug_image, top_left, bottom_right, (255, 255, 255), 2)
+        
+        # Save debug image if output directory is available
+        debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(debug_path), debug_image)
+        logger.debug(f"Saved debug image: {debug_path}")
+    
+    # Scale coordinates back to original image size if image was scaled
+    x, y, radius = largest_circle
+    original_x = int(x / scale_factor)
+    original_y = int(y / scale_factor)
+    original_radius = int(radius / scale_factor)
+    return (image, (original_x, original_y, original_radius))
+    
+
 
 
 def detect_ellipse_and_transform(image: np.ndarray, image_name: str = "debug", target_size: int = 256, min_distance_to_border: float = 0.05) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
@@ -188,7 +213,7 @@ def detect_ellipse_and_transform(image: np.ndarray, image_name: str = "debug", t
     orientation = best[5]
 
     # Transform the image so the ellipse becomes a circle
-    transformed_image = transform_ellipse_to_circle(image, largest_ellipse)
+    transformed_image = transform_ellipse_to_circle(image, tuple(largest_ellipse))
     
     # Calculate the radius of the resulting circle (average of a and b)
     radius = int((a + b) / 2)

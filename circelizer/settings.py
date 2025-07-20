@@ -9,7 +9,7 @@ DEBUG = True
 
 # Circle detection method to use
 # Options: 'hough', 'contour', 'ransac', 'gradient', 'ensemble'
-DETECTION_METHOD = os.getenv('CIRCELIZER_DETECTION_METHOD', 'ellipse')
+DETECTION_METHOD = os.getenv('CIRCELIZER_DETECTION_METHOD', 'circle')
 
 # Available detection methods mapping
 DETECTION_METHODS = {
