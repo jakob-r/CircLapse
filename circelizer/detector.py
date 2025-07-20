@@ -1,6 +1,5 @@
 import logging
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -83,7 +82,9 @@ def detect_circle(
         param2 = max(30, int(param2 * 0.95))  # Don't go below 30
 
     if circles_raw is None or len(circles_raw) == 0:
-        logger.info(f"No circles found after {max_iterations} iterations. Returning None.")
+        logger.info(
+            f"No circles found after {max_iterations} iterations. Returning None."
+        )
         return image, None
 
     circles = np.round(circles_raw[0, :]).astype("int")
@@ -91,20 +92,33 @@ def detect_circle(
     # filter out circles that are not centered in the middle 1/3rd of the image
     x_center = processed_image.shape[1] // 2
     y_center = processed_image.shape[0] // 2
-    x_range = (x_center - processed_image.shape[1] // 6, x_center + processed_image.shape[1] // 6)
-    y_range = (y_center - processed_image.shape[0] // 6, y_center + processed_image.shape[0] // 6)
+    x_range = (
+        x_center - processed_image.shape[1] // 6,
+        x_center + processed_image.shape[1] // 6,
+    )
+    y_range = (
+        y_center - processed_image.shape[0] // 6,
+        y_center + processed_image.shape[0] // 6,
+    )
     circles = [
         circle
         for circle in circles
-        if circle[0] > x_range[0] and circle[0] < x_range[1] and circle[1] > y_range[0] and circle[1] < y_range[1]
+        if circle[0] > x_range[0]
+        and circle[0] < x_range[1]
+        and circle[1] > y_range[0]
+        and circle[1] < y_range[1]
     ]
 
     # filter out circles too close to the border
-    circle_shares = [image_operators.circle_share(processed_image, circle) for circle in circles]
+    circle_shares = [
+        image_operators.circle_share(processed_image, circle) for circle in circles
+    ]
     too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
     small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
     if len(small_circles) == 0:
-        logger.info(f"All {sum(too_big)} circles are too close to the border. Returning None.")
+        logger.info(
+            f"All {sum(too_big)} circles are too close to the border. Returning None."
+        )
         return image, None
 
     big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
@@ -128,7 +142,13 @@ def detect_circle(
             cv2.circle(debug_image, (x, y), 2, (0, 0, 255), 3)
 
         # draw biggest circle
-        cv2.circle(debug_image, (largest_circle[0], largest_circle[1]), largest_circle[2], (255, 255, 255), 2)
+        cv2.circle(
+            debug_image,
+            (largest_circle[0], largest_circle[1]),
+            largest_circle[2],
+            (255, 255, 255),
+            2,
+        )
         cv2.putText(
             debug_image,
             f"Max circle share: {max_circle_share:.2f}",
@@ -142,8 +162,14 @@ def detect_circle(
         # draw box centered on the largest circle
         box_center = (largest_circle[0], largest_circle[1])
         box_side = (2 * largest_circle[2]) / max_circle_share
-        top_left = (int(box_center[0] - box_side // 2), int(box_center[1] - box_side // 2))
-        bottom_right = (int(box_center[0] + box_side // 2), int(box_center[1] + box_side // 2))
+        top_left = (
+            int(box_center[0] - box_side // 2),
+            int(box_center[1] - box_side // 2),
+        )
+        bottom_right = (
+            int(box_center[0] + box_side // 2),
+            int(box_center[1] + box_side // 2),
+        )
         cv2.rectangle(debug_image, top_left, bottom_right, (255, 255, 255), 2)
 
         # Save debug image if output directory is available
@@ -161,7 +187,10 @@ def detect_circle(
 
 
 def detect_ellipse_and_transform(
-    image: np.ndarray, image_name: str = "debug", target_size: int = 256, min_distance_to_border: float = 0.05
+    image: np.ndarray,
+    image_name: str = "debug",
+    target_size: int = 256,
+    min_distance_to_border: float = 0.05,
 ) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
     """
     Detect the largest ellipse in the image using Hough Ellipse Transform and transform it to a circle.
@@ -183,7 +212,6 @@ def detect_ellipse_and_transform(
     # scale image to target size
     new_width = int(width * scale_factor)
     new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
     processed_image = cv2.resize(processed_image, (new_width, new_height))
     logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
 
@@ -195,8 +223,12 @@ def detect_ellipse_and_transform(
 
     # Detect ellipses using Hough Ellipse Transform
 
-    logger.info(f"Detecting ellipses with accuracy: {16} on picture of size {edges.shape}")
-    ellipses = hough_ellipse(edges, accuracy=20, threshold=250, min_size=100, max_size=120)
+    logger.info(
+        f"Detecting ellipses with accuracy: {16} on picture of size {edges.shape}"
+    )
+    ellipses = hough_ellipse(
+        edges, accuracy=20, threshold=250, min_size=100, max_size=120
+    )
     if len(ellipses) == 0:
         logger.info("No ellipses found. Returning None.")
         return image, None
@@ -267,7 +299,11 @@ def transform_ellipse_to_circle(image: np.ndarray, ellipse: tuple) -> np.ndarray
 
     # Rotate to align with axes
     rotation_matrix = np.array(
-        [[np.cos(-orientation), -np.sin(-orientation), 0], [np.sin(-orientation), np.cos(-orientation), 0], [0, 0, 1]]
+        [
+            [np.cos(-orientation), -np.sin(-orientation), 0],
+            [np.sin(-orientation), np.cos(-orientation), 0],
+            [0, 0, 1],
+        ]
     )
 
     # Scale to make it circular

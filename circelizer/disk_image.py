@@ -5,9 +5,7 @@ Disk-based image storage abstraction.
 import gzip
 import logging
 import pickle
-import tempfile
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -53,7 +51,9 @@ class DiskImage:
                 image = pickle.load(f)
             return image
         except Exception as e:
-            raise RuntimeError(f"Failed to load image from {self._temp_path}: {repr(e)}")
+            raise RuntimeError(
+                f"Failed to load image from {self._temp_path}: {repr(e)}"
+            )
 
     def save(self, output_path: Path) -> bool:
         """

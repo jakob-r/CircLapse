@@ -3,13 +3,10 @@ Image processor for detecting circles and centering them.
 """
 
 import logging
-import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
 
 import cv2
-import numpy as np
 
 from circelizer import detector, image_operators, saving, settings
 from circelizer.context import output_dir
@@ -18,7 +15,9 @@ from circelizer.disk_image import DiskImage
 logger = logging.getLogger(__name__)
 
 
-def process_images(input_path: str, output_path: str, output_format: str = "jpg") -> dict:
+def process_images(
+    input_path: str, output_path: str, output_format: str = "jpg"
+) -> dict:
     """
     Process all JPG images in the input path.
 
@@ -40,7 +39,9 @@ def process_images(input_path: str, output_path: str, output_format: str = "jpg"
 
     # Find all JPG images
     image_extensions = {".jpg", ".jpeg", ".JPG", ".JPEG"}
-    image_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix in image_extensions]
+    image_files = [
+        f for f in input_dir.iterdir() if f.is_file() and f.suffix in image_extensions
+    ]
 
     if not image_files:
         logger.warning(f"No JPG images found in {input_path}")
@@ -67,7 +68,9 @@ def process_images(input_path: str, output_path: str, output_format: str = "jpg"
                 # Detect circle using configured method
                 image_name = image_file.stem
                 if settings.DETECTION_METHOD == "ellipse":
-                    res_image, circle = detector.detect_ellipse_and_transform(image, image_name)
+                    res_image, circle = detector.detect_ellipse_and_transform(
+                        image, image_name
+                    )
                 else:
                     res_image, circle = detector.detect_circle(image, image_name)
 
@@ -84,7 +87,12 @@ def process_images(input_path: str, output_path: str, output_format: str = "jpg"
 
         if not circle_data:
             logger.warning("No circles detected in any images")
-            return {"total": len(image_files), "processed": 0, "failed": 0, "no_circles": len(image_files)}
+            return {
+                "total": len(image_files),
+                "processed": 0,
+                "failed": 0,
+                "no_circles": len(image_files),
+            }
 
         # Step 2: Find how much space we have to work with
         circle_shares = []
@@ -111,14 +119,20 @@ def process_images(input_path: str, output_path: str, output_format: str = "jpg"
                 image = disk_image.load()
 
                 # Center and crop the image with consistent relative circle size and unified output width
-                processed_image = image_operators.center_and_crop_image_consistent(image, circle, max_circle_share)
+                processed_image = image_operators.center_and_crop_image_consistent(
+                    image, circle, max_circle_share
+                )
 
-                scaled_image = image_operators.scale_image(processed_image, unified_width)
+                scaled_image = image_operators.scale_image(
+                    processed_image, unified_width
+                )
 
                 # Apply automatic post-processing enhancements
                 enhanced_image = image_operators.automatic_postprocess(scaled_image)
 
-                processed_disk_image = DiskImage(enhanced_image, f"{image_file.stem}_processed", temp_path)
+                processed_disk_image = DiskImage(
+                    enhanced_image, f"{image_file.stem}_processed", temp_path
+                )
                 processed_disk_images.append(processed_disk_image)
 
             except Exception as e:
@@ -129,14 +143,18 @@ def process_images(input_path: str, output_path: str, output_format: str = "jpg"
         if output_format == "gif":
             if processed_disk_images:
                 # Load all processed images from disk for GIF creation
-                processed_images = [disk_image.load() for disk_image in processed_disk_images]
+                processed_images = [
+                    disk_image.load() for disk_image in processed_disk_images
+                ]
                 success = saving.save_gif(processed_images)
                 processed_count = len(processed_images) if success else 0
             else:
                 processed_count = 0
         elif output_format == "jpg":
             for processed_disk_image in processed_disk_images:
-                output_file_path = output_dir.get() / f"{processed_disk_image.filename}.jpg"
+                output_file_path = (
+                    output_dir.get() / f"{processed_disk_image.filename}.jpg"
+                )
                 processed_disk_image.save(output_file_path)
                 processed_count += 1
                 logger.info(f"Saved processed image: {output_file_path}")

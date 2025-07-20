@@ -27,7 +27,9 @@ def save_jpg(images: List[np.ndarray], filenames: List[Union[str, Path]]) -> int
         Number of successfully saved images
     """
     if len(images) != len(filenames):
-        raise ValueError(f"Number of images ({len(images)}) must match number of filenames ({len(filenames)})")
+        raise ValueError(
+            f"Number of images ({len(images)}) must match number of filenames ({len(filenames)})"
+        )
 
     saved_count = 0
     output_directory = output_dir.get()

@@ -5,7 +5,6 @@ Command-line interface for circelizer.
 import argparse
 import logging
 import sys
-from pathlib import Path
 
 from .processor import process_images
 
@@ -22,13 +21,24 @@ def setup_logging(verbose: bool = False):
 
 def main():
     """Main CLI entry point."""
-    parser = argparse.ArgumentParser(description="Detect circles in images, center them, and crop to square")
-    parser.add_argument("input_path", help="Path to directory containing images to process")
-    parser.add_argument("output_path", help="Path to directory where processed images will be saved")
-    parser.add_argument(
-        "--output-format", choices=["jpg", "gif"], default="jpg", help="Output format to use (default: jpg)"
+    parser = argparse.ArgumentParser(
+        description="Detect circles in images, center them, and crop to square"
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "input_path", help="Path to directory containing images to process"
+    )
+    parser.add_argument(
+        "output_path", help="Path to directory where processed images will be saved"
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["jpg", "gif"],
+        default="jpg",
+        help="Output format to use (default: jpg)",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable verbose logging"
+    )
     parser.add_argument(
         "--detection-method",
         choices=["hough", "ellipse"],
@@ -38,7 +48,9 @@ def main():
             "'ellipse' detects ellipses and transforms them to circles."
         ),
     )
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode (saves debug images)")
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debug mode (saves debug images)"
+    )
 
     args = parser.parse_args()
 
@@ -56,7 +68,7 @@ def main():
         stats = process_images(args.input_path, args.output_path, args.output_format)
 
         # Print summary
-        print(f"\nProcessing Summary:")
+        print("\nProcessing Summary:")
         print(f"Total images found: {stats['total']}")
         print(f"Successfully processed: {stats['processed']}")
         print(f"Failed: {stats['failed']}")

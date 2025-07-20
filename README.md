@@ -36,24 +36,22 @@ After installation, you can use circelizer from the command line:
 uv run python -m circelizer.cli examples/example_in examples/example_out
 ```
 
-### Detection Methods
-
-Circelizer supports multiple detection methods:
-
-- `hough` (default): OpenCV Hough circle detection
-- `ellipse`: Scikit-image Hough ellipse detection with automatic transformation to circles
-- `contour`: Contour-based circle detection
-- `ransac`: RANSAC-based circle detection
-- `gradient`: Gradient-based circle detection
-
-Example with ellipse detection:
-```bash
-uv run python -m circelizer.cli examples/example_in examples/example_out --detection-method ellipse
-```
-
 For more commands check
 ```bash
 uv run  python -m circelizer.cli
+```
+
+### Convert to mp4
+
+I recommend sorting out wrong crops and then using ffmpeg.
+
+Example:
+
+```bash
+# random filenames for random order
+set i 1; for file in (ls *.jpg | shuf); set new_name (printf "%04d.jpg" $i); mv $file $new_name; set i (math "$i + 1"); end
+# ffmpeg with slight sharpening and 12fps
+ffmpeg -framerate 12 -i %04d.jpg -vf "scale=1080:1080,unsharp=5:5:1.0:3:3:0.5" -c:v libx264 -crf 18 output.mp4
 ```
 
 

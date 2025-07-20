@@ -1,18 +1,17 @@
 import logging
-from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Tuple, Union
 
 import cv2
 import numpy as np
 
-from circelizer import settings
-from circelizer.context import output_dir
 from circelizer.disk_image import DiskImage
 
 logger = logging.getLogger(__name__)
 
 
-def center_and_crop_image(image: np.ndarray, circle: Tuple[int, int, int]) -> np.ndarray:
+def center_and_crop_image(
+    image: np.ndarray, circle: Tuple[int, int, int]
+) -> np.ndarray:
     """
     Center the image on the detected circle and crop to square.
 
@@ -67,7 +66,9 @@ def center_and_crop_image_consistent(
     crop_x = x - (final_shortest_side // 2)
     crop_y = y - (final_shortest_side // 2)
 
-    return image[crop_y : crop_y + final_shortest_side, crop_x : crop_x + final_shortest_side]
+    return image[
+        crop_y : crop_y + final_shortest_side, crop_x : crop_x + final_shortest_side
+    ]
 
 
 def output_width(images: list[Union[np.ndarray, DiskImage]]) -> int:
@@ -127,12 +128,13 @@ def circle_share(image: np.ndarray, circle: tuple[int, int, int]) -> float:
     """
     x, y, radius = circle
     height, width = image.shape[:2]
-    shortest_side = min(height, width)
     distance_to_left = x - radius
     distance_to_right = width - (x + radius)
     distance_to_top = y - radius
     distance_to_bottom = height - (y + radius)
-    shortest_distance = max(0, min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom))
+    shortest_distance = max(
+        0, min(distance_to_left, distance_to_right, distance_to_top, distance_to_bottom)
+    )
     return radius / (radius + shortest_distance)
 
 
@@ -197,7 +199,9 @@ def automatic_postprocess(image: np.ndarray) -> np.ndarray:
     return final_image
 
 
-def crop_image(image: np.ndarray, x: int, y: int, width: int, height: int) -> np.ndarray:
+def crop_image(
+    image: np.ndarray, x: int, y: int, width: int, height: int
+) -> np.ndarray:
     """
     Crop an image with out-of-bounds support, filling with black pixels.
 
