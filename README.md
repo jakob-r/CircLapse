@@ -5,13 +5,12 @@ A Python library for detecting circles and ellipses in images (like manhole cove
 <p align="center">
   <img src="examples/example_in/_DSC2623.JPG" alt="input1" width="80">
   <img src="examples/example_in/_DSC2666.JPG" alt="input2" width="80">
-  <img src="examples/example_in/_DSC2623.JPG" alt="input3" width="80">
   <img src="examples/example_in/_DSC2667.JPG" alt="input4" width="80">
-  <img src="examples/example_in/_DSC2715.JPG" alt="input5" width="80">
-
+  <img src="examples/example_in/_DSC2715.JPG" alt="input5" width="80"></br>
+  ![Example Output Animation](examples/example_out/all.gif)
 </p>
 
-![Example Output Animation](examples/example_out/all.gif)
+
 
 ## Features
 
