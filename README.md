@@ -1,4 +1,4 @@
-# Circelizer
+# Circlapse
 
 A Python library for detecting circles and ellipses in images (like manhole covers), centering them, and cropping to square format.
 
@@ -20,7 +20,7 @@ This project uses `uv` for package management. Make sure you have `uv` installed
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd circelizer
+cd circlapse
 
 # Install dependencies
 uv sync
@@ -28,17 +28,17 @@ uv sync
 
 ## Usage
 
-After installation, you can use circelizer from the command line:
+After installation, you can use circlapse from the command line:
 
 ### Basic Usage
 
 ```bash
-uv run python -m circelizer.cli examples/example_in examples/example_out
+uv run python -m circlapse.cli examples/example_in examples/example_out
 ```
 
 For more commands check
 ```bash
-uv run  python -m circelizer.cli
+uv run  python -m circlapse.cli
 ```
 
 ### Convert to mp4

@@ -1,5 +1,5 @@
 [project]
-name = "circelizer"
+name = "circlapse"
 version = "0.1.0"
 description = "A library for detecting circles in images and centering them"
 readme = "README.md"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-circelizer = "circelizer.cli:main"
+circlapse = "circlapse.cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -52,7 +52,7 @@ addopts = [
     "--strict-config",
     "--verbose",
     "--tb=short",
-    "--cov=circelizer",
+    "--cov=circlapse",
     "--cov-report=term-missing",
     "--cov-report=html",
 ]
