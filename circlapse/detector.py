@@ -13,79 +13,47 @@ from circlapse.context import output_dir
 logger = logging.getLogger(__name__)
 
 
-def detect_circle(
-    image: np.ndarray,
+def _detect_circle_with_params(
+    processed_image: np.ndarray,
+    param1: int,
+    param2: int,
+    shortest_side: int,
+    min_distance_to_border: float,
     image_name: str = "debug",
-    target_size: int = 800,
-    min_distance_to_border: float = 0.05,
-    max_iterations: int = 5,
-) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
+) -> Optional[Tuple[int, int, int]]:
     """
-    Detect the largest circle in the image using Hough Circle Transform.
+    Detect circles with specific parameters and filter them.
 
     Args:
-        image: Input image as numpy array
-        image_name: Name for debug image (used when DEBUG=True)
-        target_size: Target size for the longest side (default: 800px)
+        processed_image: Preprocessed image
+        param1: Edge detection threshold
+        param2: Accumulator threshold
+        shortest_side: Shortest side of the image
         min_distance_to_border: Minimum distance from border as fraction of image size
-        max_iterations: Maximum number of iterations to try lowering thresholds (default: 5)
+        image_name: Name for debug image (used when DEBUG=True)
 
     Returns:
-        Tuple of (processed_image, circle_coords) where circle_coords is (x, y, radius) or None
+        Circle coordinates (x, y, radius) or None if no valid circles found
     """
-    # Scale image to consistent size for better circle detection
-    processed_image = image.copy()
-    height, width = processed_image.shape[:2]
-    scale_factor = target_size / max(height, width)
-
-    # scale image to target size
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
-    processed_image = cv2.resize(processed_image, (new_width, new_height))
-    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
-
     # Convert to grayscale
     gray = cv2.cvtColor(processed_image, cv2.COLOR_BGR2GRAY)
 
     # Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
-    # Initial parameters for Hough Circle Transform
-    param1 = 30  # Edge detection threshold
-    param2 = 100  # Accumulator threshold
-
-    # Try to detect circles with progressively lower thresholds
-    circles_raw = None
-    for iteration in range(max_iterations):
-        logger.debug(
-            f"Circle detection iteration {iteration + 1}/{max_iterations} with param1={param1}, param2={param2}"
-        )
-
-        circles_raw = cv2.HoughCircles(
-            blurred,
-            cv2.HOUGH_GRADIENT,
-            dp=1,
-            minDist=100,
-            param1=param1,
-            param2=param2,
-            minRadius=shortest_side // 6,
-            maxRadius=shortest_side // 2,
-        )
-
-        if circles_raw is not None and len(circles_raw) > 0:
-            logger.debug(f"Found circles in iteration {iteration + 1}")
-            break
-
-        # Lower thresholds for next iteration
-        param1 = max(10, int(param1 * 0.95))  # Don't go below 10
-        param2 = max(30, int(param2 * 0.95))  # Don't go below 30
+    circles_raw = cv2.HoughCircles(
+        blurred,
+        cv2.HOUGH_GRADIENT,
+        dp=1,
+        minDist=100,
+        param1=param1,
+        param2=param2,
+        minRadius=shortest_side // 8,
+        maxRadius=shortest_side // 2,
+    )
 
     if circles_raw is None or len(circles_raw) == 0:
-        logger.info(
-            f"No circles found after {max_iterations} iterations. Returning None."
-        )
-        return image, None
+        return None
 
     circles = np.round(circles_raw[0, :]).astype("int")
 
@@ -119,13 +87,13 @@ def detect_circle(
         logger.info(
             f"All {sum(too_big)} circles are too close to the border. Returning None."
         )
-        return image, None
+        return None
 
     big_circles = [circle for circle, too_big in zip(circles, too_big) if too_big]
 
     # Return the largest circle (assuming it's the main object)
     largest_circle = max(small_circles, key=lambda x: x[2])
-    max_circle_share = image_operators.circle_share(image, largest_circle)
+    max_circle_share = image_operators.circle_share(processed_image, largest_circle)
 
     # Save debug image if DEBUG is enabled
     if settings.DEBUG:
@@ -173,10 +141,81 @@ def detect_circle(
         cv2.rectangle(debug_image, top_left, bottom_right, (255, 255, 255), 2)
 
         # Save debug image if output directory is available
-        debug_path = output_dir.get() / "debug" / f"{image_name}_circles.jpg"
+        debug_path = (
+            output_dir.get() / "debug" / f"{image_name}_circles_{param1}_{param2}.jpg"
+        )
         debug_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(debug_path), debug_image)
         logger.debug(f"Saved debug image: {debug_path}")
+
+    return largest_circle
+
+
+def detect_circle(
+    image: np.ndarray,
+    image_name: str = "debug",
+    target_size: int = 800,
+    min_distance_to_border: float = 0.1,
+    max_iterations: int = 7,
+) -> Tuple[np.ndarray, Optional[Tuple[int, int, int]]]:
+    """
+    Detect the largest circle in the image using Hough Circle Transform.
+
+    Args:
+        image: Input image as numpy array
+        image_name: Name for debug image (used when DEBUG=True)
+        target_size: Target size for the longest side (default: 800px)
+        min_distance_to_border: Minimum distance from border as fraction of image size
+        max_iterations: Maximum number of iterations to try lowering thresholds (default: 5)
+
+    Returns:
+        Tuple of (processed_image, circle_coords) where circle_coords is (x, y, radius) or None
+    """
+    # Scale image to consistent size for better circle detection
+    processed_image = image.copy()
+    height, width = processed_image.shape[:2]
+    scale_factor = target_size / max(height, width)
+
+    # scale image to target size
+    new_width = int(width * scale_factor)
+    new_height = int(height * scale_factor)
+    shortest_side = min(new_width, new_height)
+    processed_image = cv2.resize(processed_image, (new_width, new_height))
+    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
+
+    # Initial parameters for Hough Circle Transform
+    param1 = int(30 * (1 / 0.95) ** 2)  # Edge detection threshold
+    param2 = int(100 * (1 / 0.95) ** 2)  # Accumulator threshold
+
+    # Try to detect circles with progressively lower thresholds
+    largest_circle = None
+    for iteration in range(max_iterations):
+        logger.debug(
+            f"Circle detection iteration {iteration + 1}/{max_iterations} with param1={param1}, param2={param2}"
+        )
+
+        largest_circle = _detect_circle_with_params(
+            processed_image,
+            param1,
+            param2,
+            shortest_side,
+            min_distance_to_border,
+            image_name,
+        )
+
+        if largest_circle is not None:
+            logger.debug(f"Found circles in iteration {iteration + 1}")
+            break
+
+        # Lower thresholds for next iteration
+        param1 = max(10, int(param1 * 0.95))  # Don't go below 10
+        param2 = max(30, int(param2 * 0.95))  # Don't go below 30
+
+    if largest_circle is None:
+        logger.info(
+            f"No circles found after {max_iterations} iterations. Returning None."
+        )
+        return image, None
 
     # Scale coordinates back to original image size if image was scaled
     x, y, radius = largest_circle
