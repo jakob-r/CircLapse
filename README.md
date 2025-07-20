@@ -2,6 +2,16 @@
 
 A Python library for detecting circles and ellipses in images (like manhole covers), centering them, and cropping to square format.
 
+<p align="center">
+  <img src="examples/example_in/1.jpg" alt="input 1" width="80">
+  <img src="examples/example_in/2.jpg" alt="input 2" width="80">
+  <img src="examples/example_in/3.jpg" alt="input 3" width="80">
+  <img src="examples/example_in/4.jpg" alt="input 4" width="80">
+  <img src="examples/example_in/5.jpg" alt="input 5" width="80">
+</p>
+
+![Example Output Animation](examples/example_out/all.gif)
+
 ## Features
 
 - 🔍 **Circle Detection**: Uses openCV circle detection.
