@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 import logging
 from circelizer import settings
 from circelizer.context import output_dir
+from circelizer.disk_image import DiskImage
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +65,29 @@ def center_and_crop_image_consistent(image: np.ndarray, circle: Tuple[int, int, 
     return image[crop_y:crop_y + final_shortest_side, crop_x:crop_x + final_shortest_side]
 
 
-def output_width(images: list[np.ndarray]) -> int:
+def output_width(images: list[Union[np.ndarray, DiskImage]]) -> int:
     """
     Calculate the unified output width based on all shortest sides.
+    Works efficiently with both numpy arrays and DiskImage objects.
     
     Args:
-        shortest_sides: List of shortest side lengths from all images
+        images: List of images (numpy arrays or DiskImage objects)
         
     Returns:
         A output width that downscales most images to a similar size but allows some upscaling.
     """
-    all_shortest_sides = [min(image.shape[:2]) for image in images]
+    all_shortest_sides = []
+    
+    for image in images:
+        if isinstance(image, DiskImage):  # DiskImage object
+            # Load image temporarily to get dimensions
+            loaded_image = image.load()
+            shortest_side = min(loaded_image.shape[:2])
+        else:  # numpy array
+            shortest_side = min(image.shape[:2])
+        
+        all_shortest_sides.append(shortest_side)
+    
     return int(np.percentile(all_shortest_sides, 10))
 
 
