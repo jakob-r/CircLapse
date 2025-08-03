@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import cv2
 import numpy as np
@@ -55,7 +55,8 @@ def _detect_circle_with_params(
     if circles_raw is None or len(circles_raw) == 0:
         return None
 
-    circles = np.round(circles_raw[0, :]).astype("int")
+    circles_array = np.round(circles_raw[0, :]).astype("int")
+    circles: List[np.ndarray] = [circle for circle in circles_array]
 
     # filter out circles that are not centered in the middle 1/3rd of the image
     x_center = processed_image.shape[1] // 2
@@ -78,9 +79,14 @@ def _detect_circle_with_params(
     ]
 
     # filter out circles too close to the border
-    circle_shares = [
-        image_operators.circle_share(processed_image, circle) for circle in circles
-    ]
+    circle_shares = []
+    for circle in circles:
+        # Convert numpy array to tuple for circle_share
+        circle_tuple = (int(circle[0]), int(circle[1]), int(circle[2]))
+        circle_shares.append(
+            image_operators.circle_share(processed_image, circle_tuple)
+        )
+
     too_big = [share > (1 - min_distance_to_border) for share in circle_shares]
     small_circles = [circle for circle, too_big in zip(circles, too_big) if not too_big]
     if len(small_circles) == 0:
@@ -93,7 +99,15 @@ def _detect_circle_with_params(
 
     # Return the largest circle (assuming it's the main object)
     largest_circle = max(small_circles, key=lambda x: x[2])
-    max_circle_share = image_operators.circle_share(processed_image, largest_circle)
+    # Convert to tuple for return
+    largest_circle_tuple = (
+        int(largest_circle[0]),
+        int(largest_circle[1]),
+        int(largest_circle[2]),
+    )
+    max_circle_share = image_operators.circle_share(
+        processed_image, largest_circle_tuple
+    )
 
     # Save debug image if DEBUG is enabled
     if settings.DEBUG:
@@ -148,7 +162,7 @@ def _detect_circle_with_params(
         cv2.imwrite(str(debug_path), debug_image)
         logger.debug(f"Saved debug image: {debug_path}")
 
-    return largest_circle
+    return largest_circle_tuple
 
 
 def detect_circle(
@@ -172,16 +186,10 @@ def detect_circle(
         Tuple of (processed_image, circle_coords) where circle_coords is (x, y, radius) or None
     """
     # Scale image to consistent size for better circle detection
-    processed_image = image.copy()
-    height, width = processed_image.shape[:2]
-    scale_factor = target_size / max(height, width)
-
-    # scale image to target size
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    shortest_side = min(new_width, new_height)
-    processed_image = cv2.resize(processed_image, (new_width, new_height))
-    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
+    processed_image, scale_factor = image_operators.scale_shortest_side(
+        image, target_size
+    )
+    shortest_side = min(processed_image.shape[:2])
 
     # Initial parameters for Hough Circle Transform
     param1 = int(30 * (1 / 0.95) ** 2)  # Edge detection threshold
@@ -244,15 +252,9 @@ def detect_ellipse_and_transform(
         Tuple of (transformed_image, circle_coords) where circle_coords is (x, y, radius) or None
     """
     # Scale image to consistent size for better ellipse detection
-    processed_image = image.copy()
-    height, width = processed_image.shape[:2]
-    scale_factor = target_size / max(height, width)
-
-    # scale image to target size
-    new_width = int(width * scale_factor)
-    new_height = int(height * scale_factor)
-    processed_image = cv2.resize(processed_image, (new_width, new_height))
-    logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
+    processed_image, scale_factor = image_operators.scale_shortest_side(
+        image, target_size
+    )
 
     # Convert to grayscale
     gray = cv2.cvtColor(processed_image, cv2.COLOR_BGR2GRAY)

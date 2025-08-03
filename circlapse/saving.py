@@ -4,18 +4,18 @@ Image saving utilities.
 
 import logging
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 import cv2
-import numpy as np
 from PIL import Image
+from circlapse.image_types import GenericImage
 
 from circlapse.context import output_dir
 
 logger = logging.getLogger(__name__)
 
 
-def save_jpg(images: List[np.ndarray], filenames: List[Union[str, Path]]) -> int:
+def save_jpg(images: List[GenericImage], filenames: List[str] | List[Path]) -> int:
     """
     Save multiple images as JPG files.
 
@@ -32,22 +32,26 @@ def save_jpg(images: List[np.ndarray], filenames: List[Union[str, Path]]) -> int
         )
 
     saved_count = 0
-    output_directory = output_dir.get()
+    output_directory = Path(output_dir.get())
 
     for image, filename in zip(images, filenames):
         try:
             # Convert filename to Path if it's a string
             if isinstance(filename, str):
-                filename = Path(filename)
+                filename_path = Path(filename)
+            elif isinstance(filename, Path):
+                filename_path = filename
+            else:
+                raise ValueError(f"Invalid filename type: {type(filename)}")
 
             # Create output path
-            output_path = output_directory / filename.name
+            output_path = output_directory / filename_path.name
 
             # Save the image
-            success = cv2.imwrite(str(output_path), image)
+            success = cv2.imwrite(str(output_path), image.data)
 
             if success:
-                logger.info(f"Successfully saved {filename} -> {output_path}")
+                logger.info(f"Successfully saved {filename_path} -> {output_path}")
                 saved_count += 1
             else:
                 logger.error(f"Failed to save {filename}")
@@ -58,7 +62,7 @@ def save_jpg(images: List[np.ndarray], filenames: List[Union[str, Path]]) -> int
     return saved_count
 
 
-def save_gif(images: List[np.ndarray]) -> bool:
+def save_gif(images: List[GenericImage]) -> bool:
     """
     Save multiple images as a single GIF file.
 
@@ -80,7 +84,7 @@ def save_gif(images: List[np.ndarray]) -> bool:
         pil_images = []
         for img in images:
             # Convert BGR to RGB
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            rgb_img = cv2.cvtColor(img.data, cv2.COLOR_BGR2RGB)
             # Convert numpy array to PIL Image
             pil_img = Image.fromarray(rgb_img)
             pil_images.append(pil_img)
