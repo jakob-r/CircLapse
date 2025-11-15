@@ -43,19 +43,40 @@ def detect_edges(
     return BinaryImage.from_numpy(edges)
 
 
-def match_score(edges_binary: BinaryImage, goal_edges_binary: BinaryImage) -> float:
+def match_score(
+    edges_binary: BinaryImage, goal_edges: BinaryImage | GrayscaleImage
+) -> float:
     """
     Calculate the match score between two edge images.
 
     Args:
         edges_binary: Binary edge image (bool)
-        goal_edges_binary: Target binary edge image (bool)
+        goal_edges: Target edge image - can be binary (bool) or grayscale (uint8)
 
     Returns:
         Match score between 0.0 and 1.0
+        - For binary goal_edges: exact match (0 or 1 per pixel)
+        - For grayscale goal_edges: similarity based on pixel differences (0-1 per pixel)
     """
+    # Convert binary edges to 0-1 range for comparison
+    edges_normalized = edges_binary.data.astype(np.float32)
 
-    return np.sum(edges_binary.data == goal_edges_binary.data) / edges_binary.size
+    if isinstance(goal_edges, BinaryImage):
+        # Binary comparison: exact match (0 or 1)
+        return np.sum(edges_binary.data == goal_edges.data) / edges_binary.size
+    elif isinstance(goal_edges, GrayscaleImage):
+        # Grayscale comparison: calculate similarity based on pixel differences
+        # Normalize grayscale to 0-1 range
+        goal_normalized = goal_edges.data.astype(np.float32) / 255.0
+        # Calculate similarity: 1 - abs(difference) for each pixel
+        # This gives a value between 0 and 1 for each pixel
+        pixel_similarities = 1.0 - np.abs(edges_normalized - goal_normalized)
+        # Return average similarity across all pixels
+        return np.mean(pixel_similarities)
+    else:
+        raise TypeError(
+            f"goal_edges must be BinaryImage or GrayscaleImage, got {type(goal_edges)}"
+        )
 
 
 def optim_morph(
@@ -248,7 +269,7 @@ def optim_morph_gradient(
         x0,
         method="L-BFGS-B",  # Good for bounded optimization
         bounds=bounds,
-        options={"maxiter": 100, "disp": False},
+        options={"maxiter": 100, "disp": False, "eps": 1e-4},
     )
 
     if not result.success:

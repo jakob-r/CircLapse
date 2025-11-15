@@ -105,20 +105,22 @@ class TestMatchScore:
         assert result == 1.0
 
         # Opposite patterns
-        goal_edges_opposite = np.array([[False, True], [True, False]], dtype=bool)
+        goal_edges_opposite = BinaryImage.from_numpy(
+            np.array([[False, True], [True, False]], dtype=bool)
+        )
         result_opposite = match_score(edges_binary, goal_edges_opposite)
         assert result_opposite == 0.0
 
     def test_empty_images(self):
         """Test with 1x1 images."""
-        edges_binary = np.array([[False]], dtype=bool)
-        goal_edges_binary = np.array([[False]], dtype=bool)
+        edges_binary = BinaryImage.from_numpy(np.array([[False]], dtype=bool))
+        goal_edges_binary = BinaryImage.from_numpy(np.array([[False]], dtype=bool))
 
         result = match_score(edges_binary, goal_edges_binary)
         assert result == 1.0
 
-        edges_binary = np.array([[True]], dtype=bool)
-        goal_edges_binary = np.array([[False]], dtype=bool)
+        edges_binary = BinaryImage.from_numpy(np.array([[True]], dtype=bool))
+        goal_edges_binary = BinaryImage.from_numpy(np.array([[False]], dtype=bool))
 
         result = match_score(edges_binary, goal_edges_binary)
         assert result == 0.0
