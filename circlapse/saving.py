@@ -48,7 +48,7 @@ def save_jpg(images: List[GenericImage], filenames: List[str] | List[Path]) -> i
             output_path = output_directory / filename_path.name
 
             # Save the image
-            success = cv2.imwrite(str(output_path), image.data)
+            success = cv2.imwrite(str(output_path), image.imwrite_data)
 
             if success:
                 logger.info(f"Successfully saved {filename_path} -> {output_path}")

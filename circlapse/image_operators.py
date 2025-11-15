@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from circlapse.disk_image import DiskImage
-from circlapse.image_types import RGBImage, BinaryImage
+from circlapse.image_types import GrayscaleImage, RGBImage, BinaryImage
 
 logger = logging.getLogger(__name__)
 
@@ -315,3 +315,15 @@ def scale_shortest_side(
     logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
 
     return processed_image, scale_factor
+
+
+def blur_and_normalize(image: BinaryImage, kernel_size: int = 5) -> GrayscaleImage:
+    """
+    Blur a binary image and normalize it to 0-255.
+    """
+    image_data = image.data.astype(np.uint8) * 255
+    blurred = cv2.GaussianBlur(image_data, (kernel_size, kernel_size), 0)
+    max_value = np.max(blurred)
+    min_value = np.min(blurred)
+    normalized = (blurred - min_value) / (max_value - min_value)
+    return GrayscaleImage.from_numpy(normalized)

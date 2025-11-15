@@ -1,5 +1,8 @@
 import numpy as np
 import cv2
+import pytest
+from circlapse.generators import create_circle_outline_image
+from circlapse.image_operators import blur_and_normalize
 from circlapse.shape_detector import (
     match_score,
     morph_image,
@@ -71,8 +74,6 @@ class TestMatchScore:
     def test_circle_with_dilated_goal(self):
         """Test case 8: circle on black with bigger line width goal_edges."""
         # Create 10x10 black image with white circle
-        edges_binary = BinaryImage.blank((10, 10))
-
         # Draw a circle using OpenCV
         circle_img = np.zeros((10, 10), dtype=np.uint8)
         cv2.circle(circle_img, (5, 5), 3, 255, 1)  # Circle with radius 3, thickness 1
@@ -124,6 +125,55 @@ class TestMatchScore:
 
         result = match_score(edges_binary, goal_edges_binary)
         assert result == 0.0
+
+    def test_grayscale_goal_edges(self):
+        """Test match_score with grayscale goal_edges."""
+        # Test perfect match: binary True (1.0) matches grayscale white (255 -> 1.0)
+        edges_binary = BinaryImage.from_numpy(np.array([[True]], dtype=bool))
+        goal_edges_grayscale = GrayscaleImage.from_numpy(
+            np.array([[255]], dtype=np.uint8)
+        )
+        result = match_score(edges_binary, goal_edges_grayscale)
+        assert result == 1.0
+
+        # Test perfect match: binary False (0.0) matches grayscale black (0 -> 0.0)
+        edges_binary = BinaryImage.from_numpy(np.array([[False]], dtype=bool))
+        goal_edges_grayscale = GrayscaleImage.from_numpy(
+            np.array([[0]], dtype=np.uint8)
+        )
+        result = match_score(edges_binary, goal_edges_grayscale)
+        assert result == 1.0
+
+        # Test partial match: binary True (1.0) matches grayscale 128 (0.5)
+        edges_binary = BinaryImage.from_numpy(np.array([[True]], dtype=bool))
+        goal_edges_grayscale = GrayscaleImage.from_numpy(
+            np.array([[128]], dtype=np.uint8)
+        )
+        result = match_score(edges_binary, goal_edges_grayscale)
+        assert result == pytest.approx(0.5, abs=0.002)
+
+    def test_grayscale_circle(self):
+        """
+        Test realistic case:
+         - edges: binary circle outline
+         - goal_edges: circle with blurred edges to guide the optimizer
+        """
+        edges_binary = BinaryImage.from_numpy(create_circle_outline_image(32, 10))
+        edges_grayscale_blurred = blur_and_normalize(edges_binary)
+        score = match_score(edges_binary, edges_grayscale_blurred)
+        assert score > 0.8
+
+        # circle too small
+        edges_binary_small = BinaryImage.from_numpy(create_circle_outline_image(32, 8))
+        score_small = match_score(edges_binary_small, edges_grayscale_blurred)
+        assert score_small > 0
+        assert score_small < score
+
+        # circle too large
+        edges_binary_large = BinaryImage.from_numpy(create_circle_outline_image(32, 12))
+        score_large = match_score(edges_binary_large, edges_grayscale_blurred)
+        assert score_large > 0
+        assert score_large < score
 
 
 class TestMorphImage:

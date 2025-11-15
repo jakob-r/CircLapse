@@ -26,6 +26,10 @@ class GenericImage(BaseModel):
     def dtype(self) -> np.dtype:
         return self.data.dtype
 
+    @property
+    def imwrite_data(self) -> np.ndarray:
+        return self.data
+
     def to_type(self, type: Type["GenericImage"]) -> "GenericImage":
         return type.from_numpy(self.data)
 
@@ -63,13 +67,13 @@ class RGBImage(GenericImage):
             # Convert grayscale to RGB by repeating the channel
             rgb_data = np.stack([data, data, data], axis=2)
             return cls(data=rgb_data)
-        elif is_binary_image(data):
+        elif is_binary_image(data) or is_float_grayscale_image(data):
             # Convert binary to RGB (white for True, black for False)
             rgb_data = np.stack(
                 [
-                    data.astype(np.uint8) * 255,
-                    data.astype(np.uint8) * 255,
-                    data.astype(np.uint8) * 255,
+                    (data * 255).astype(np.uint8),
+                    (data * 255).astype(np.uint8),
+                    (data * 255).astype(np.uint8),
                 ],
                 axis=2,
             )
@@ -96,9 +100,9 @@ class GrayscaleImage(GenericImage):
                 np.uint8
             )
             return cls(data=grayscale_data)
-        elif is_binary_image(data):
+        elif is_binary_image(data) or is_float_grayscale_image(data):
             # Convert binary to grayscale (255 for True, 0 for False)
-            grayscale_data = data.astype(np.uint8) * 255
+            grayscale_data = (data * 255).astype(np.uint8)
             return cls(data=grayscale_data)
         else:
             raise ValueError(f"Cannot convert {data.shape} to Grayscale")
@@ -110,6 +114,10 @@ class GrayscaleImage(GenericImage):
 
 class BinaryImage(GenericImage):
     data: NDArray[Shape["*,*"], bool]  # noqa: F722
+
+    @property
+    def imwrite_data(self) -> np.ndarray:
+        return self.data * 255
 
     @classmethod
     def from_numpy(cls, data: np.ndarray) -> "BinaryImage":
@@ -123,6 +131,10 @@ class BinaryImage(GenericImage):
         elif is_grayscale_image(data):
             # Convert grayscale to binary using threshold
             binary_data = data > 127
+            return cls(data=binary_data)
+        elif is_float_grayscale_image(data):
+            # Convert float grayscale to binary using threshold
+            binary_data = data > 0.5
             return cls(data=binary_data)
         else:
             raise ValueError(f"Cannot convert {data.shape} to Binary")
@@ -140,6 +152,13 @@ def is_rgb_image(image: np.ndarray) -> bool:
 def is_grayscale_image(image: np.ndarray) -> bool:
     """Check if image is grayscale (2D, uint8)."""
     return len(image.shape) == 2 and image.dtype == np.uint8
+
+
+def is_float_grayscale_image(image: np.ndarray) -> bool:
+    """Check if image is grayscale (2D, float64 or float32)."""
+    return len(image.shape) == 2 and (
+        image.dtype == np.float64 or image.dtype == np.float32
+    )
 
 
 def is_binary_image(image: np.ndarray) -> bool:

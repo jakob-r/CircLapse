@@ -17,6 +17,20 @@ def create_circle_image(size: int = 400, radius: int = 150) -> np.ndarray:
     return image
 
 
+def create_circle_outline_image(
+    size: int = 400, radius: int = 150, thickness: int = 1
+) -> np.ndarray:
+    """
+    Creates a square image with a black background and a white outline circle in the center.
+    """
+    image = np.zeros((size, size), dtype=np.uint8)  # Black background
+    center_x, center_y = size // 2, size // 2
+    cv2.circle(
+        image, (center_x, center_y), radius, (255,), thickness
+    )  # White outline circle
+    return image
+
+
 def create_circle_image_with_noise(
     size: int = 400, radius: int = 350, noise_level: float = 0.1
 ) -> np.ndarray:
