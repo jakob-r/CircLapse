@@ -211,14 +211,24 @@ def optim_morph_gradient(
 
     # Define parameter scaling factors
     img_width, img_height = edges_binary.shape
+
+    # Set epsilon to a reasonable value for gradient estimation
+    epsilon = 1e-4
+
+    # Adjust param_scales so that a change of epsilon in normalized space corresponds to:
+    # - 1 pixel for x_shift and y_shift
+    # - 0.5 degrees for rotation
+    # Since: actual_change = epsilon * param_scale, we need: param_scale = desired_change / epsilon
     param_scales = {
-        "x_shift": img_width // 4,
-        "y_shift": img_height // 4,
+        "x_shift": 1.0 / epsilon,  # epsilon * (1/epsilon) = 1 pixel
+        "y_shift": 1.0 / epsilon,  # epsilon * (1/epsilon) = 1 pixel
         "scale": 0.2,  # Will be applied as 1.0 + norm * 0.2
         "tilt_x": 0.3,
         "tilt_y": 0.3,
-        "rotation": 10,
+        "rotation": 1 / epsilon,  # epsilon * (0.5/epsilon) = 0.5 degrees
     }
+
+    goal_edges_blurred = image_operators.blur_and_normalize(goal_edges_binary)
 
     def objective_function(params):
         """Objective function to minimize (negative match score)."""
@@ -240,6 +250,10 @@ def optim_morph_gradient(
         tilt_y = tilt_y_norm * param_scales["tilt_y"]
         rotation = rotation_norm * param_scales["rotation"]
 
+        logger.debug(
+            f"Trying parameters: x_shift={x_shift}, y_shift={y_shift}, scale={scale}, tilt_x={tilt_x}, tilt_y={tilt_y}, rotation={rotation}"
+        )
+
         # Apply transformation
         morphed_edges_grayscale = morph_image(
             GrayscaleImage.from_numpy(edges_binary.data),
@@ -252,8 +266,21 @@ def optim_morph_gradient(
         )
         morphed_edges_binary = BinaryImage.from_numpy(morphed_edges_grayscale.data)
 
+        # for debugging, save the morphed edges
+        filename = (
+            f"{output_dir.get()}/morphed_edges_binary"
+            f"_x{round(x_shift, 3)}"
+            f"_y{round(y_shift, 3)}"
+            f"_scale{round(scale, 3)}"
+            f"_tilt_x{round(tilt_x, 3)}"
+            f"_tilt_y{round(tilt_y, 3)}"
+            f"_rotation{round(rotation, 3)}.jpg"
+        )
+        save_jpg([morphed_edges_binary], [filename])
+
         # Return negative score for minimization
-        score = match_score(morphed_edges_binary, goal_edges_binary)
+        score = match_score(morphed_edges_binary, goal_edges_blurred)
+        logger.debug(f"Score: {score:.4f}")
         return -score
 
     bounds = [(-1, 1)] * len(param_scales)
@@ -269,7 +296,7 @@ def optim_morph_gradient(
         x0,
         method="L-BFGS-B",  # Good for bounded optimization
         bounds=bounds,
-        options={"maxiter": 100, "disp": False, "eps": 1e-4},
+        options={"maxiter": 100, "disp": False, "eps": epsilon},
     )
 
     if not result.success:
