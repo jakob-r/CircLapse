@@ -1,4 +1,6 @@
 from typing import Optional
+from datetime import datetime
+from pathlib import Path
 import cv2
 import numpy as np
 import logging
@@ -220,18 +222,71 @@ def optim_morph_gradient(
     # - 0.5 degrees for rotation
     # Since: actual_change = epsilon * param_scale, we need: param_scale = desired_change / epsilon
     param_scales = {
-        "x_shift": 1.0 / epsilon,  # epsilon * (1/epsilon) = 1 pixel
-        "y_shift": 1.0 / epsilon,  # epsilon * (1/epsilon) = 1 pixel
-        "scale": 0.2,  # Will be applied as 1.0 + norm * 0.2
-        "tilt_x": 0.3,
-        "tilt_y": 0.3,
-        "rotation": 1 / epsilon,  # epsilon * (0.5/epsilon) = 0.5 degrees
+        "x_shift": 1.0 / epsilon,  # one epsilon is one pixel
+        "y_shift": 1.0 / epsilon,  # one epsilon is one pixel
+        "scale": 0.05 / epsilon,
+        "tilt_x": 0.05 / epsilon,
+        "tilt_y": 0.05 / epsilon,
+        "rotation": 1 / epsilon,  # one epsilon is one degree
+    }
+
+    # Define reasonable actual parameter ranges and calculate corresponding normalized bounds
+    # For x_shift: want -img_width//4 to img_width//4
+    #   x_shift = x_shift_norm * param_scales["x_shift"]
+    #   So: x_shift_norm = x_shift / param_scales["x_shift"]
+    max_x_shift = img_width // 4
+    max_y_shift = img_height // 4
+    max_scale_range = 0.2  # scale from 0.8 to 1.2 (1.0 ± 0.2)
+    max_tilt = 0.3
+    max_rotation = 10  # degrees
+
+    # Calculate normalized bounds
+    param_bounds = {
+        "x_shift": (
+            -max_x_shift / param_scales["x_shift"],
+            max_x_shift / param_scales["x_shift"],
+        ),
+        "y_shift": (
+            -max_y_shift / param_scales["y_shift"],
+            max_y_shift / param_scales["y_shift"],
+        ),
+        "scale": (
+            -max_scale_range / param_scales["scale"],
+            max_scale_range / param_scales["scale"],
+        ),
+        "tilt_x": (
+            -max_tilt / param_scales["tilt_x"],
+            max_tilt / param_scales["tilt_x"],
+        ),
+        "tilt_y": (
+            -max_tilt / param_scales["tilt_y"],
+            max_tilt / param_scales["tilt_y"],
+        ),
+        "rotation": (
+            -max_rotation / param_scales["rotation"],
+            max_rotation / param_scales["rotation"],
+        ),
     }
 
     goal_edges_blurred = image_operators.blur_and_normalize(goal_edges_binary)
 
+    # Create timestamped folder for this optimization run and set it as output_dir
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamped_folder = Path(output_dir.get()) / f"optimization_{timestamp}"
+    timestamped_folder.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Saving optimization iterations to: {timestamped_folder}")
+
+    # Save original output_dir and set new one for this optimization
+    original_output_dir = output_dir.get()
+    output_dir.set(timestamped_folder)
+
+    iteration_count = 0
+
     def objective_function(params):
         """Objective function to minimize (negative match score)."""
+        nonlocal iteration_count
+        iteration_count += 1
+
         # Transform parameters from [-1, 1] range to actual parameter ranges
         (
             x_shift_norm,
@@ -266,26 +321,30 @@ def optim_morph_gradient(
         )
         morphed_edges_binary = BinaryImage.from_numpy(morphed_edges_grayscale.data)
 
-        # for debugging, save the morphed edges
-        filename = (
-            f"{output_dir.get()}/morphed_edges_binary"
-            f"_x{round(x_shift, 3)}"
-            f"_y{round(y_shift, 3)}"
-            f"_scale{round(scale, 3)}"
-            f"_tilt_x{round(tilt_x, 3)}"
-            f"_tilt_y{round(tilt_y, 3)}"
-            f"_rotation{round(rotation, 3)}.jpg"
-        )
-        save_jpg([morphed_edges_binary], [filename])
-
         # Return negative score for minimization
         score = match_score(morphed_edges_binary, goal_edges_blurred)
+
+        # for debugging, save the morphed edges
+        filename = (
+            f"morphed_edges_binary"
+            f"_iter{iteration_count}"
+            f"_score{score:.3f}"
+            f"_x{x_shift:.3f}"
+            f"_y{y_shift:.3f}"
+            f"_scale{scale:.3f}"
+            f"_tilt_x{tilt_x:.3f}"
+            f"_tilt_y{tilt_y:.3f}"
+            f"_rotation{rotation:.3f}.jpg"
+        )
+        save_jpg([morphed_edges_binary], [filename])
         logger.debug(f"Score: {score:.4f}")
         return -score
 
-    bounds = [(-1, 1)] * len(param_scales)
+    # Convert param_bounds dict to list in the correct order
+    param_order = ["x_shift", "y_shift", "scale", "tilt_x", "tilt_y", "rotation"]
+    bounds = [param_bounds[param] for param in param_order]
 
-    # Initial guess (no transformation) - normalized to [-1, 1] range
+    # Initial guess (no transformation) - all zeros correspond to no transformation
     x0 = [0] * len(param_scales)
 
     logger.info("Starting gradient-based optimization...")
@@ -325,6 +384,9 @@ def optim_morph_gradient(
         f"Gradient optimization complete. Best score: {best_score:.4f} with params: {best_params}"
     )
     logger.info(f"Optimization iterations: {result.nit}")
+
+    # Restore original output_dir
+    output_dir.set(original_output_dir)
 
     return best_edges.to_type(BinaryImage), best_score, best_params
 

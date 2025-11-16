@@ -319,11 +319,17 @@ def scale_shortest_side(
 
 def blur_and_normalize(image: BinaryImage, kernel_size: int = 5) -> GrayscaleImage:
     """
-    Blur a binary image and normalize it to 0-255.
+    Blur a binary image to create a glow effect and normalize it to 0-255.
+    All white pixels in the original image remain white in the result.
     """
     image_data = image.data.astype(np.uint8) * 255
     blurred = cv2.GaussianBlur(image_data, (kernel_size, kernel_size), 0)
-    max_value = np.max(blurred)
-    min_value = np.min(blurred)
-    normalized = (blurred - min_value) / (max_value - min_value)
-    return GrayscaleImage.from_numpy(normalized)
+    # Ensure original white pixels remain white (glow effect)
+    result = np.maximum(blurred, image_data)
+    max_value = np.max(result)
+    min_value = np.min(result)
+    if max_value > min_value:
+        normalized = (result - min_value) / (max_value - min_value) * 255
+    else:
+        normalized = result
+    return GrayscaleImage.from_numpy(normalized.astype(np.uint8))
