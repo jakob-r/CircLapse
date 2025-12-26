@@ -324,12 +324,13 @@ def blur_and_normalize(image: BinaryImage, kernel_size: int = 5) -> GrayscaleIma
     """
     image_data = image.data.astype(np.uint8) * 255
     blurred = cv2.GaussianBlur(image_data, (kernel_size, kernel_size), 0)
-    # Ensure original white pixels remain white (glow effect)
-    result = np.maximum(blurred, image_data)
-    max_value = np.max(result)
-    min_value = np.min(result)
+    max_value = np.max(blurred)
+    min_value = np.min(blurred)
     if max_value > min_value:
-        normalized = (result - min_value) / (max_value - min_value) * 255
+        normalized = (blurred - min_value) / (max_value - min_value) * 255
     else:
-        normalized = result
-    return GrayscaleImage.from_numpy(normalized.astype(np.uint8))
+        normalized = blurred
+    # Ensure original white pixels remain white (glow effect)
+    blurred_weight = 0.5
+    result = np.maximum(normalized * blurred_weight, image_data)
+    return GrayscaleImage.from_numpy(result.astype(np.uint8))

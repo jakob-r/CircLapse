@@ -8,7 +8,8 @@ from skimage.feature import canny
 
 from circlapse import image_operators
 from circlapse.context import output_dir
-from circlapse.saving import save_jpg
+from circlapse.saving import save_jpg, save_multi_jpg_with_text
+from circlapse.morph import morph_image
 from circlapse.image_types import (
     GrayscaleImage,
     BinaryImage,
@@ -37,7 +38,7 @@ def detect_edges(
         Binary edge image (bool, True for edges, False for background)
     """
     edges = canny(
-        grayscale_image,
+        grayscale_image.data,
         sigma=sigma,
         low_threshold=low_threshold,
         high_threshold=low_threshold * high_threshold_multiplier,
@@ -46,7 +47,7 @@ def detect_edges(
 
 
 def match_score(
-    edges_binary: BinaryImage, goal_edges: BinaryImage | GrayscaleImage
+    edges: BinaryImage | GrayscaleImage, goal_edges: BinaryImage | GrayscaleImage
 ) -> float:
     """
     Calculate the match score between two edge images.
@@ -61,24 +62,39 @@ def match_score(
         - For grayscale goal_edges: similarity based on pixel differences (0-1 per pixel)
     """
     # Convert binary edges to 0-1 range for comparison
-    edges_normalized = edges_binary.data.astype(np.float32)
-
-    if isinstance(goal_edges, BinaryImage):
-        # Binary comparison: exact match (0 or 1)
-        return np.sum(edges_binary.data == goal_edges.data) / edges_binary.size
-    elif isinstance(goal_edges, GrayscaleImage):
-        # Grayscale comparison: calculate similarity based on pixel differences
-        # Normalize grayscale to 0-1 range
-        goal_normalized = goal_edges.data.astype(np.float32) / 255.0
-        # Calculate similarity: 1 - abs(difference) for each pixel
-        # This gives a value between 0 and 1 for each pixel
-        pixel_similarities = 1.0 - np.abs(edges_normalized - goal_normalized)
-        # Return average similarity across all pixels
-        return np.mean(pixel_similarities)
+    if isinstance(edges, BinaryImage):
+        edges_normalized = edges.data.astype(np.float32)
+    elif isinstance(edges, GrayscaleImage):
+        edges_normalized = edges.data.astype(np.float32) / 255.0
     else:
         raise TypeError(
-            f"goal_edges must be BinaryImage or GrayscaleImage, got {type(goal_edges)}"
+            f"edges must be BinaryImage or GrayscaleImage, got {type(edges)}"
         )
+
+    if isinstance(goal_edges, BinaryImage):
+        goal_normalized = goal_edges.data.astype(np.float32)
+    elif isinstance(goal_edges, GrayscaleImage):
+        goal_normalized = goal_edges.data.astype(np.float32) / 255.0
+    else:
+        raise TypeError(
+            f"edges must be BinaryImage or GrayscaleImage, got {type(edges)}"
+        )
+
+    pixel_similarities = 1.0 - np.abs(edges_normalized - goal_normalized)
+    return np.mean(pixel_similarities)
+
+
+def rmse_score(
+    edges: GrayscaleImage,
+    goal_edges: GrayscaleImage,
+) -> float:
+    """
+    Calculate the RMSE score between two edge images.
+    Low RMSE score is better.
+    """
+    goal_normalized = goal_edges.data.astype(np.float32) / 255.0
+    edges_normalized = edges.data.astype(np.float32) / 255.0
+    return np.sqrt(np.mean(np.square(edges_normalized - goal_normalized)))
 
 
 def optim_morph(
@@ -214,61 +230,44 @@ def optim_morph_gradient(
     # Define parameter scaling factors
     img_width, img_height = edges_binary.shape
 
-    # Set epsilon to a reasonable value for gradient estimation
     epsilon = 1e-4
 
-    # Adjust param_scales so that a change of epsilon in normalized space corresponds to:
-    # - 1 pixel for x_shift and y_shift
-    # - 0.5 degrees for rotation
-    # Since: actual_change = epsilon * param_scale, we need: param_scale = desired_change / epsilon
+    # determines the first stepsize for the gradient descent in each dimension
     param_scales = {
-        "x_shift": 1.0 / epsilon,  # one epsilon is one pixel
-        "y_shift": 1.0 / epsilon,  # one epsilon is one pixel
-        "scale": 0.05 / epsilon,
-        "tilt_x": 0.05 / epsilon,
-        "tilt_y": 0.05 / epsilon,
-        "rotation": 1 / epsilon,  # one epsilon is one degree
+        "x_shift": 5.0,
+        "y_shift": 5.0,
+        "scale": 0.1,
+        "tilt_x": 0.2,
+        "tilt_y": 0.2,
+        "rotation": 5,
     }
 
-    # Define reasonable actual parameter ranges and calculate corresponding normalized bounds
-    # For x_shift: want -img_width//4 to img_width//4
-    #   x_shift = x_shift_norm * param_scales["x_shift"]
-    #   So: x_shift_norm = x_shift / param_scales["x_shift"]
+    param_scales = {key: value / epsilon for key, value in param_scales.items()}
+
     max_x_shift = img_width // 4
     max_y_shift = img_height // 4
-    max_scale_range = 0.2  # scale from 0.8 to 1.2 (1.0 ± 0.2)
-    max_tilt = 0.3
-    max_rotation = 10  # degrees
+    max_scale_range = 0.5  # scale from 0.8 to 1.2 (1.0 ± 0.2)
+    max_tilt = 0.4
+    max_rotation = 15  # degrees
 
     # Calculate normalized bounds
     param_bounds = {
-        "x_shift": (
-            -max_x_shift / param_scales["x_shift"],
-            max_x_shift / param_scales["x_shift"],
-        ),
-        "y_shift": (
-            -max_y_shift / param_scales["y_shift"],
-            max_y_shift / param_scales["y_shift"],
-        ),
-        "scale": (
-            -max_scale_range / param_scales["scale"],
-            max_scale_range / param_scales["scale"],
-        ),
-        "tilt_x": (
-            -max_tilt / param_scales["tilt_x"],
-            max_tilt / param_scales["tilt_x"],
-        ),
-        "tilt_y": (
-            -max_tilt / param_scales["tilt_y"],
-            max_tilt / param_scales["tilt_y"],
-        ),
-        "rotation": (
-            -max_rotation / param_scales["rotation"],
-            max_rotation / param_scales["rotation"],
-        ),
+        "x_shift": (-max_x_shift, max_x_shift),
+        "y_shift": (-max_y_shift, max_y_shift),
+        "scale": (-max_scale_range, max_scale_range),
+        "tilt_x": (-max_tilt, max_tilt),
+        "tilt_y": (-max_tilt, max_tilt),
+        "rotation": (-max_rotation, max_rotation),
     }
 
-    goal_edges_blurred = image_operators.blur_and_normalize(goal_edges_binary)
+    param_bounds = {
+        key: (value[0] / param_scales[key], value[1] / param_scales[key])
+        for key, value in param_bounds.items()
+    }
+
+    goal_edges_blurred = image_operators.blur_and_normalize(
+        goal_edges_binary, kernel_size=img_width // 4 * 2 + 1
+    )
 
     # Create timestamped folder for this optimization run and set it as output_dir
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -281,10 +280,16 @@ def optim_morph_gradient(
     output_dir.set(timestamped_folder)
 
     iteration_count = 0
+    best_score = float("inf")
+    best_params = None
+    best_iteration = None
 
     def objective_function(params):
         """Objective function to minimize (negative match score)."""
         nonlocal iteration_count
+        nonlocal best_score
+        nonlocal best_params
+        nonlocal best_iteration
         iteration_count += 1
 
         # Transform parameters from [-1, 1] range to actual parameter ranges
@@ -319,26 +324,31 @@ def optim_morph_gradient(
             tilt_y,
             rotation,
         )
-        morphed_edges_binary = BinaryImage.from_numpy(morphed_edges_grayscale.data)
-
         # Return negative score for minimization
-        score = match_score(morphed_edges_binary, goal_edges_blurred)
+        # score = rmse_score(morphed_edges_grayscale, goal_edges_blurred)
+        score = -match_score(morphed_edges_grayscale, goal_edges_blurred)
 
-        # for debugging, save the morphed edges
-        filename = (
-            f"morphed_edges_binary"
-            f"_iter{iteration_count}"
-            f"_score{score:.3f}"
-            f"_x{x_shift:.3f}"
-            f"_y{y_shift:.3f}"
-            f"_scale{scale:.3f}"
-            f"_tilt_x{tilt_x:.3f}"
-            f"_tilt_y{tilt_y:.3f}"
-            f"_rotation{rotation:.3f}.jpg"
+        if score < best_score:
+            best_score = score
+            best_params = params
+            best_iteration = iteration_count
+
+        # for debugging, save annotated comparison
+        text = (
+            f"iter: {iteration_count} (best: {best_iteration})\n"
+            f"score: {score:.3f} (best: {best_score:.3f})\n"
+            f"x: {x_shift:.2f}, y: {y_shift:.2f}\n"
+            f"scale: {scale:.3f}\n"
+            f"tilt: ({tilt_x:.2f}, {tilt_y:.2f})\n"
+            f"rot: {rotation:.2f}"
         )
-        save_jpg([morphed_edges_binary], [filename])
+        save_multi_jpg_with_text(
+            [morphed_edges_grayscale, goal_edges_blurred],
+            [text, "goal"],
+            f"iter_{iteration_count:04d}.jpg",
+        )
         logger.debug(f"Score: {score:.4f}")
-        return -score
+        return score
 
     # Convert param_bounds dict to list in the correct order
     param_order = ["x_shift", "y_shift", "scale", "tilt_x", "tilt_y", "rotation"]
@@ -389,78 +399,6 @@ def optim_morph_gradient(
     output_dir.set(original_output_dir)
 
     return best_edges.to_type(BinaryImage), best_score, best_params
-
-
-def morph_image(
-    image: GrayscaleImage | RGBImage,
-    x_shift: int,
-    y_shift: int,
-    scale: float,
-    tilt_x: float,
-    tilt_y: float,
-    rotation: float,
-) -> GrayscaleImage | RGBImage:
-    """
-    Morph the image by shifting, scaling, tilting, and rotating.
-    Fills empty space with black pixels and crops it to the same size as the input image.
-    The output image is the same size as the input image.
-
-    Args:
-        grayscale_image: Input grayscale image (uint8)
-        x_shift: Horizontal shift in pixels
-        y_shift: Vertical shift in pixels
-        scale: Scale factor (1.0 = no scaling)
-        tilt_x: Horizontal tilt/shear factor
-        tilt_y: Vertical tilt/shear factor
-        rotation: Rotation angle in degrees
-
-    Returns:
-        Morphed grayscale image (uint8)
-    """
-
-    height, width = image.shape
-
-    # Create transformation matrix
-    # Start with identity matrix
-    transform_matrix = np.eye(3)
-
-    # Apply rotation (around center)
-    if rotation != 0:
-        cos_rot = np.cos(np.radians(rotation))
-        sin_rot = np.sin(np.radians(rotation))
-        rotation_matrix = np.array(
-            [[cos_rot, -sin_rot, 0], [sin_rot, cos_rot, 0], [0, 0, 1]]
-        )
-        transform_matrix = rotation_matrix @ transform_matrix
-
-    # Apply scaling (around center)
-    if scale != 1.0:
-        scale_matrix = np.array([[scale, 0, 0], [0, scale, 0], [0, 0, 1]])
-        transform_matrix = scale_matrix @ transform_matrix
-
-    # Apply tilt/shear
-    if tilt_x != 0 or tilt_y != 0:
-        shear_matrix = np.array([[1, tilt_x, 0], [tilt_y, 1, 0], [0, 0, 1]])
-        transform_matrix = shear_matrix @ transform_matrix
-
-    # Apply translation
-    if x_shift != 0 or y_shift != 0:
-        translation_matrix = np.array([[1, 0, x_shift], [0, 1, y_shift], [0, 0, 1]])
-        transform_matrix = translation_matrix @ transform_matrix
-
-    # Apply the transformation
-    # Use cv2.warpAffine which expects a 2x3 matrix, so we drop the last row
-    affine_matrix = transform_matrix[:2, :].astype(np.float32)
-    morphed_image = cv2.warpAffine(
-        image.data,
-        affine_matrix,
-        (width, height),
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0,
-    )
-
-    result_type = type(image)
-    return result_type.from_numpy(morphed_image)
 
 
 def shape_detector(

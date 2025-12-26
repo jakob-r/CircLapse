@@ -6,7 +6,9 @@ different image formats (RGB, grayscale, binary) and their data types.
 """
 
 from typing import Type
+from pathlib import Path
 import numpy as np
+import cv2
 from pydantic import BaseModel
 from numpydantic import NDArray, Shape
 
@@ -54,6 +56,57 @@ class GenericImage(BaseModel):
 
     def copy(self) -> "GenericImage":
         return self.model_copy()
+
+    def view(self, window_name: str = "Image Preview", wait_key: bool = True) -> None:
+        """
+        Display the image in a preview window using OpenCV.
+
+        Args:
+            window_name: Name of the window to display the image in
+            wait_key: If True, waits for a key press before closing (default: True)
+        """
+        cv2.imshow(window_name, self.imwrite_data)
+        if wait_key:
+            print(f"Press any key to close the '{window_name}' window...")
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+    def save(self, filename: str | Path | None = None) -> Path:
+        """
+        Save the image to the current working directory.
+
+        Args:
+            filename: Optional filename. If not provided, generates a default name
+                     based on the image type and timestamp.
+
+        Returns:
+            Path to the saved file
+        """
+        if filename is None:
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_type = self.__class__.__name__.lower().replace("image", "")
+            filename = f"debug_{image_type}_{timestamp}.jpg"
+
+        filepath = Path(filename)
+        # If no extension provided, add .jpg
+        if not filepath.suffix:
+            filepath = filepath.with_suffix(".jpg")
+
+        # Ensure we're saving to current working directory
+        if filepath.is_absolute():
+            output_path = filepath
+        else:
+            output_path = Path.cwd() / filepath
+
+        # Save using cv2.imwrite
+        success = cv2.imwrite(str(output_path), self.imwrite_data)
+        if not success:
+            raise RuntimeError(f"Failed to save image to {output_path}")
+
+        print(f"Image saved to: {output_path}")
+        return output_path
 
 
 class RGBImage(GenericImage):
