@@ -358,9 +358,9 @@ class TestOptimMorph:
         )
 
         # add noise to the start image
-        start_image = add_noise(start_image, 0.1, 0)
+        start_image = add_noise(start_image, 0.2, 3)
 
-        start_image_binary = detect_edges(start_image, 2.0, 0.5, 1.5)
+        start_image_binary = detect_edges(start_image, 2.0, 4.0, 16.0)
 
         # Test gradient-based optimization
 
@@ -378,7 +378,6 @@ class TestOptimMorph:
             edges_binary,
             mask=BinaryImage.from_numpy(start_image_binary.data == 66),
         )
-        assert theoretical_end_image_score < best_score_grad
 
         # Should find a good match
         # assert best_score_grad > 0.5
@@ -401,7 +400,7 @@ class TestOptimMorph:
         # Convert boolean arrays to uint8 images for saving
 
         filenames = [
-            os.path.join(output_dir, "start_image_noisy.jpg"),
+            os.path.join(output_dir, "start_image.jpg"),
             os.path.join(output_dir, "edges_grad.jpg"),
             os.path.join(output_dir, "goal_edges_grad.jpg"),
             os.path.join(output_dir, "optimized_edges_grad.jpg"),
@@ -409,3 +408,5 @@ class TestOptimMorph:
         images = [start_image, start_image_binary, edges_binary, optimized_edges_grad]
 
         save_jpg(images, filenames)
+
+        assert theoretical_end_image_score < best_score_grad
