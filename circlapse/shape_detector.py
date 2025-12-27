@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import logging
+from scipy.ndimage import distance_transform_edt
 from skimage.feature import canny
 
 from circlapse import image_operators
@@ -43,6 +44,7 @@ def detect_edges(
         low_threshold=low_threshold,
         high_threshold=low_threshold * high_threshold_multiplier,
     )
+
     return BinaryImage.from_numpy(edges)
 
 
@@ -86,15 +88,43 @@ def match_score(
 
 def rmse_score(
     edges: GrayscaleImage,
-    goal_edges: GrayscaleImage,
+    target_edges: GrayscaleImage,
 ) -> float:
     """
     Calculate the RMSE score between two edge images.
     Low RMSE score is better.
     """
-    goal_normalized = goal_edges.data.astype(np.float32) / 255.0
+    target_normalized = target_edges.data.astype(np.float32) / 255.0
     edges_normalized = edges.data.astype(np.float32) / 255.0
-    return np.sqrt(np.mean(np.square(edges_normalized - goal_normalized)))
+    return np.sqrt(np.mean(np.square(edges_normalized - target_normalized)))
+
+
+def distance_transform_score(
+    edges: BinaryImage,
+    target_edges: BinaryImage,
+    mask: BinaryImage | None = None,
+) -> float:
+    """
+    Calculate the distance transform score between two edge images.
+    Low distance transform score is better.
+    Args:
+        edges: Binary edge image to score (bool)
+        target_edges: Target binary edge image (bool)
+        mask: If given, we will only score the distance transform of the edges that are not masked.
+    """
+    if mask is None:
+        mask = BinaryImage.blank((edges.shape[0], edges.shape[1]))
+    # inds_inside = np.where(np.logical_not(mask.data))
+    inds_outside = np.where(mask.data)
+    dist_input = distance_transform_edt(np.logical_not(edges.data))
+    dist_target = distance_transform_edt(np.logical_not(target_edges.data))
+    dist_diff = dist_input - dist_target
+    # cv2.imwrite("dist_diff.jpg", np.clip(dist_diff * 200, 0, 255).astype(np.uint8))
+    # cv2.imwrite("dist_input.jpg", np.clip(dist_input * 200, 0, 255).astype(np.uint8))
+    # cv2.imwrite("dist_target.jpg", np.clip(dist_target * 10, 0, 255).astype(np.uint8))
+    dist_diff[inds_outside] = np.min(edges.shape)
+    loss = np.mean(np.square(dist_diff))
+    return loss
 
 
 def optim_morph_grid(
@@ -257,10 +287,6 @@ def optim_morph_gradient(
         (-max_rotation, max_rotation),  # rotation
     ]
 
-    goal_edges_blurred = image_operators.blur_and_normalize(
-        goal_edges_binary, kernel_size=img_width // 4 * 2 + 1, blur_weight=0.99
-    )
-
     # Create timestamped folder for this optimization run
     timestamped_folder = None
     original_output_dir = None
@@ -290,6 +316,7 @@ def optim_morph_gradient(
         )
 
         # Apply transformation
+        morph_bg_color = 66
         morphed_edges_grayscale = morph_image(
             GrayscaleImage.from_numpy(edges_binary.data),
             x_shift,
@@ -298,8 +325,12 @@ def optim_morph_gradient(
             tilt_x,
             tilt_y,
             rotation,
+            background_color=morph_bg_color,
         )
-        score = rmse_score(morphed_edges_grayscale, goal_edges_blurred)
+        mask = BinaryImage.from_numpy(morphed_edges_grayscale.data == morph_bg_color)
+        score = distance_transform_score(
+            morphed_edges_grayscale.to_type(BinaryImage), goal_edges_binary, mask=mask
+        )
 
         if score < best_score:
             best_score = score
@@ -318,7 +349,7 @@ def optim_morph_gradient(
                 f"rot: {rotation:.2f}"
             )
             save_multi_jpg_with_text(
-                [morphed_edges_grayscale, goal_edges_blurred],
+                [morphed_edges_grayscale, goal_edges_binary],
                 [text, "goal"],
                 f"iter_{iteration_count:04d}.jpg",
             )
@@ -465,7 +496,9 @@ def optim_morph_gradient(
     }
 
     # Apply best transformation to get final result
-    best_edges = morph_image(edges_binary.to_type(GrayscaleImage), **best_params)
+    best_edges = morph_image(
+        edges_binary.to_type(GrayscaleImage), **best_params, background_color=0
+    )
 
     logger.info(
         f"Optimization complete ({method}). Best score: {final_score:.4f} with params: {best_params}"
@@ -496,7 +529,7 @@ def shape_detector(
     target_size = 800
 
     rgb_image, scale_factor = image_operators.scale_shortest_side(
-        rgb_image.data, target_size
+        rgb_image, target_size
     )
 
     # save shape_image
@@ -505,13 +538,16 @@ def shape_detector(
 
     # save inverted shape_image for debugging
     inverted_shape = cv2.bitwise_not(shape_image_binary.data)
-    save_jpg([inverted_shape], [str(output_path) + "/inverted_shape_image.jpg"])
+    save_jpg(
+        [BinaryImage.from_numpy(inverted_shape)],
+        [str(output_path) + "/inverted_shape_image.jpg"],
+    )
 
     # detect contours of shape_image
     # cv2.findContours expects white objects on black background, so we need to invert
     # since our shape_image has black circle on white background
     contours, _ = cv2.findContours(
-        inverted_shape, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        image=inverted_shape, mode=cv2.RETR_EXTERNAL, method=cv2.CHAIN_APPROX_SIMPLE
     )
     if len(contours) == 0:
         logger.warning("No contours found in shape_image")
@@ -523,7 +559,7 @@ def shape_detector(
 
     # Create a blank image to draw contours on for debugging
     contour_image_uint8 = shape_image_binary.blank_like()
-    cv2.drawContours(contour_image_uint8, [contour], -1, 255, 2)
+    cv2.drawContours(contour_image_uint8.data, [contour], -1, 255, 2)
     save_jpg([contour_image_uint8], [str(output_path) + "/contour.jpg"])
 
     # --- Try all parameter combinations for Canny edge detection ---
@@ -532,12 +568,14 @@ def shape_detector(
     high_threshold_multiplier_values = [1.1, 2, 4]
 
     # detect edges
-    edges = canny(shape_image_binary, sigma=2.0, low_threshold=0.55, high_threshold=0.8)
-    save_jpg([edges], [str(output_path) + "/edges.jpg"])
+    edges = canny(
+        shape_image_binary.data, sigma=2.0, low_threshold=0.55, high_threshold=0.8
+    )
+    save_jpg([BinaryImage.from_numpy(edges)], [str(output_path) + "/edges.jpg"])
 
     # now the same in source image
     # convert to grayscale for contour detection
-    gray_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
+    gray_image = cv2.cvtColor(rgb_image.data, cv2.COLOR_BGR2GRAY)
     contours, _ = cv2.findContours(
         gray_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
@@ -551,13 +589,16 @@ def shape_detector(
 
     # draw contour on source image
     image_with_contour = rgb_image.copy()
-    cv2.drawContours(image_with_contour, [contour], -1, 255, 2)
+    cv2.drawContours(image_with_contour.data, [contour], -1, 255, 2)
     save_jpg([image_with_contour], [str(output_path) + "/image_with_contour.jpg"])
 
     # detect edges in source image
     # Blur the grayscale image a bit to reduce noise before edge detection
     gray_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
-    save_jpg([gray_image], [str(output_path) + "/gray_image_blurred.jpg"])
+    save_jpg(
+        [GrayscaleImage.from_numpy(gray_image)],
+        [str(output_path) + "/gray_image_blurred.jpg"],
+    )
     for sigma in sigma_values:
         for low in low_threshold_values:
             for high_multiplier in high_threshold_multiplier_values:
@@ -568,7 +609,7 @@ def shape_detector(
                 fname = (
                     f"{output_path}/edges_source_sigma{sigma}_low{low}_high{high}.jpg"
                 )
-                save_jpg([edges], [fname])
+                save_jpg([BinaryImage.from_numpy(edges)], [fname])
 
     # Fallback to contour-based detection if no ellipses found
     # Calculate the bounding circle of the contour
@@ -577,3 +618,25 @@ def shape_detector(
     radius = int(radius)
 
     return (center[0], center[1], radius)
+
+
+if __name__ == "__main__":
+    grayscale_image = GrayscaleImage.blank((64, 64))
+    # draw a circle in the center
+    cv2.circle(grayscale_image.data, (32, 32), 16, 255, -1)
+
+    morph_params = {
+        "x_shift": 5.0,
+        "y_shift": 5.0,
+        "scale": 0.9,
+        "tilt_x": 0.0,
+        "tilt_y": 0.0,
+        "rotation": 0.0,
+    }
+    morphed_image = morph_image(grayscale_image, **morph_params, background_color=0)
+
+    noise_image = image_operators.add_noise(morphed_image, 0.1, 0)
+
+    noise_image_rgb = noise_image.to_type(RGBImage)
+
+    shape_detector(noise_image_rgb, grayscale_image)

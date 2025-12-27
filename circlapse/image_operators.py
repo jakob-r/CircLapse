@@ -311,7 +311,7 @@ def scale_shortest_side(
     # scale image to target size
     new_width = int(width * scale_factor)
     new_height = int(height * scale_factor)
-    processed_image = cv2.resize(processed_image, (new_width, new_height))
+    processed_image.data = cv2.resize(processed_image.data, (new_width, new_height))
     logger.debug(f"Scaled image from {width}x{height} to {new_width}x{new_height}")
 
     return processed_image, scale_factor
@@ -344,3 +344,88 @@ def expand_white_pixels(image: BinaryImage, kernel_size: int = 5) -> BinaryImage
     image_data = image.data.astype(np.uint8) * 255
     expanded = cv2.dilate(image_data, np.ones((kernel_size, kernel_size), np.uint8))
     return BinaryImage.from_numpy(expanded.astype(bool))
+
+
+def create_noise_image(
+    mean_value: int | tuple[int, int, int], shape: tuple[int, int]
+) -> GrayscaleImage | RGBImage:
+    """
+    Create a noise image with the given mean value and shape.
+    """
+    if isinstance(mean_value, int):
+        noise = np.random.normal(mean_value, 50, shape)
+        noise = np.clip(np.round(noise), 0, 255).astype(np.uint8)
+        return GrayscaleImage.from_numpy(noise)
+    elif isinstance(mean_value, tuple):
+        noises = []
+        for i in range(len(mean_value)):
+            noise = np.random.normal(0, 1, shape)
+            noise = np.clip(noise, 0, 1) * 255
+            noises.append(noise.astype(np.uint8))
+        return RGBImage.from_numpy(np.stack(noises, axis=2))
+
+
+def add_noise(
+    image: GrayscaleImage,
+    gaussian_noise_sigma: float = 0.1,
+    random_objects: int = 10,
+) -> GrayscaleImage:
+    """
+    Add noise and random objects to a grayscale image.
+    Args:
+        image: Input grayscale image
+        gaussian_noise_sigma: Standard deviation of the Gaussian noise (relative to 255)
+        random_objects: Number of random objects to add. Chooses circles, triangles, rectangles and lines randomly.
+    Returns:
+        Grayscale image with noise and random objects
+    """
+    height, width = image.shape
+    result = image.data.astype(np.float32)
+
+    # Add Gaussian noise
+    if gaussian_noise_sigma > 0:
+        noise = np.random.normal(0, gaussian_noise_sigma * 255, (height, width))
+        result = result + noise
+
+    # Add random objects
+    for _ in range(random_objects):
+        object_type = np.random.choice(["circle", "triangle", "rectangle", "line"])
+        intensity = np.random.randint(0, 256)
+        thickness = np.random.randint(1, 4)
+
+        if object_type == "circle":
+            center_x = np.random.randint(0, width)
+            center_y = np.random.randint(0, height)
+            radius = np.random.randint(5, max(6, min(width, height) // 10))
+            cv2.circle(result, (center_x, center_y), radius, intensity, thickness)
+
+        elif object_type == "triangle":
+            pts = np.array(
+                [
+                    [np.random.randint(0, width), np.random.randint(0, height)],
+                    [np.random.randint(0, width), np.random.randint(0, height)],
+                    [np.random.randint(0, width), np.random.randint(0, height)],
+                ],
+                dtype=np.int32,
+            )
+            cv2.polylines(
+                result, [pts], isClosed=True, color=intensity, thickness=thickness
+            )
+
+        elif object_type == "rectangle":
+            x1 = np.random.randint(0, width)
+            y1 = np.random.randint(0, height)
+            x2 = np.random.randint(0, width)
+            y2 = np.random.randint(0, height)
+            cv2.rectangle(result, (x1, y1), (x2, y2), intensity, thickness)
+
+        elif object_type == "line":
+            x1 = np.random.randint(0, width)
+            y1 = np.random.randint(0, height)
+            x2 = np.random.randint(0, width)
+            y2 = np.random.randint(0, height)
+            cv2.line(result, (x1, y1), (x2, y2), intensity, thickness)
+
+    # Clip to valid range and convert back to uint8
+    result = np.clip(result, 0, 255).astype(np.uint8)
+    return GrayscaleImage.from_numpy(result)

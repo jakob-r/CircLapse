@@ -2,15 +2,16 @@ import numpy as np
 import cv2
 import pytest
 from circlapse.generators import create_circle_outline_image
-from circlapse.image_operators import blur_and_normalize
+from circlapse.image_operators import add_noise, blur_and_normalize
 from circlapse.shape_detector import (
     detect_edges,
+    distance_transform_score,
     match_score,
     optim_morph_grid,
     optim_morph_gradient,
     rmse_score,
 )
-from circlapse.morph import morph_image
+from circlapse.morph import morph_image, revert_morph_image
 from circlapse.image_types import BinaryImage, GrayscaleImage
 
 
@@ -200,6 +201,45 @@ class TestRmseScore:
         assert rmse_score(img1, img2) == pytest.approx(128 / 255, abs=0.001)
 
 
+def test_morph_revert_e2e_score():
+    # original image is a square
+    target_image = GrayscaleImage.blank((64, 64))
+    target_image.data[16:48, 16:48] = 255
+
+    target_edges = detect_edges(target_image, 1.0, 0.5, 1.5)
+
+    transform_params = {
+        "x_shift": 10,
+        "y_shift": 10,
+        "scale": 1.1,
+        "tilt_x": 0.1,
+        "tilt_y": 0.1,
+        "rotation": 10,
+    }
+
+    start_image = morph_image(target_image, **transform_params, background_color=0)
+    start_image_edges = detect_edges(start_image, 1.0, 0.5, 1.5)
+
+    theoretical_end_image_edges = revert_morph_image(
+        GrayscaleImage.from_numpy(start_image_edges.data),
+        **transform_params,
+        background_color=0,
+    )
+
+    score_theoretical_end_image = distance_transform_score(
+        theoretical_end_image_edges.to_type(BinaryImage), target_edges
+    )
+    score_start_image_edges = distance_transform_score(
+        start_image_edges.to_type(BinaryImage), target_edges
+    )
+    score_target_edges = distance_transform_score(
+        target_edges.to_type(BinaryImage), target_edges.to_type(BinaryImage)
+    )
+
+    assert score_theoretical_end_image < score_start_image_edges
+    assert score_target_edges < score_theoretical_end_image
+
+
 class TestOptimMorph:
     """Test cases for the optim_morph function."""
 
@@ -296,18 +336,14 @@ class TestOptimMorph:
             255  # White square in center (32x32 square)
         )
         edges_binary = detect_edges(grayscale_image, 2.0, 0.5, 1.5)
-        from circlapse.image_operators import expand_white_pixels
-
-        edges_binary = expand_white_pixels(edges_binary, kernel_size=3)
-
         # Apply a known transformation to create goal_edges
         start_params = {
-            "x_shift": 5,
-            "y_shift": 5,
-            "scale": 1.1,
-            "tilt_x": 0,
-            "tilt_y": 0,
-            "rotation": 0,
+            "x_shift": 5.0,
+            "y_shift": 5.0,
+            "scale": 0.9,
+            "tilt_x": 0.1,
+            "tilt_y": 0.0,
+            "rotation": 5.0,
         }
 
         start_image = morph_image(
@@ -318,7 +354,12 @@ class TestOptimMorph:
             start_params["tilt_x"],
             start_params["tilt_y"],
             start_params["rotation"],
+            background_color=0,
         )
+
+        # add noise to the start image
+        start_image = add_noise(start_image, 0.1, 0)
+
         start_image_binary = detect_edges(start_image, 2.0, 0.5, 1.5)
 
         # Test gradient-based optimization
@@ -326,6 +367,18 @@ class TestOptimMorph:
         optimized_edges_grad, best_score_grad, best_params_grad = optim_morph_gradient(
             start_image_binary, edges_binary, method="cma"
         )
+
+        theoretical_end_image_edges = revert_morph_image(
+            start_image_binary.to_type(GrayscaleImage),
+            **start_params,
+            background_color=66,
+        )
+        theoretical_end_image_score = distance_transform_score(
+            theoretical_end_image_edges.to_type(BinaryImage),
+            edges_binary,
+            mask=BinaryImage.from_numpy(start_image_binary.data == 66),
+        )
+        assert theoretical_end_image_score < best_score_grad
 
         # Should find a good match
         # assert best_score_grad > 0.5
@@ -348,10 +401,11 @@ class TestOptimMorph:
         # Convert boolean arrays to uint8 images for saving
 
         filenames = [
+            os.path.join(output_dir, "start_image_noisy.jpg"),
             os.path.join(output_dir, "edges_grad.jpg"),
             os.path.join(output_dir, "goal_edges_grad.jpg"),
             os.path.join(output_dir, "optimized_edges_grad.jpg"),
         ]
-        images = [start_image_binary, edges_binary, optimized_edges_grad]
+        images = [start_image, start_image_binary, edges_binary, optimized_edges_grad]
 
         save_jpg(images, filenames)

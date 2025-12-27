@@ -36,7 +36,7 @@ class GenericImage(BaseModel):
         return type.from_numpy(self.data)
 
     def blank_like(self) -> "GenericImage":
-        return self.model_copy(data=np.zeros_like(self.data))
+        return self.blank((self.shape[0], self.shape[1]))
 
     @classmethod
     def blank(cls, resolution: tuple[int, int]) -> "GenericImage":

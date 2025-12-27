@@ -12,6 +12,7 @@ def morph_image(
     tilt_x: float,
     tilt_y: float,
     rotation: float,
+    background_color: int | tuple[int, int, int] = 0,
 ) -> GrayscaleImage | RGBImage:
     """
     Morph the image by shifting, scaling, tilting, and rotating.
@@ -26,7 +27,7 @@ def morph_image(
         tilt_x: Horizontal tilt/shear factor
         tilt_y: Vertical tilt/shear factor
         rotation: Rotation angle in degrees
-
+        background_color: int for grayscale, tuple[int, int, int] for RGB
     Returns:
         Morphed image (same type as input, uint8)
     """
@@ -35,8 +36,9 @@ def morph_image(
     M = get_transform_matrix(
         image.data.shape, rotation, scale, tilt_x, tilt_y, x_shift, y_shift
     )
+
     morphed = cv2.warpPerspective(
-        image.data, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=0
+        image.data, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=background_color
     )
 
     result_type = type(image)
@@ -51,6 +53,7 @@ def revert_morph_image(
     tilt_x: float,
     tilt_y: float,
     rotation: float,
+    background_color: int | tuple[int, int, int] = 0,
 ) -> GrayscaleImage | RGBImage:
     """
     Reverse a morph transformation.
@@ -62,7 +65,7 @@ def revert_morph_image(
     )
     M_inv = np.linalg.inv(M)
     reverted = cv2.warpPerspective(
-        image.data, M_inv, (w, h), flags=cv2.INTER_LINEAR, borderValue=0
+        image.data, M_inv, (w, h), flags=cv2.INTER_LINEAR, borderValue=background_color
     )
 
     result_type = type(image)
