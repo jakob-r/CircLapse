@@ -97,7 +97,7 @@ def rmse_score(
     return np.sqrt(np.mean(np.square(edges_normalized - goal_normalized)))
 
 
-def optim_morph(
+def optim_morph_grid(
     edges_binary: BinaryImage,
     goal_edges_binary: BinaryImage,
 ) -> tuple[BinaryImage, float, dict]:
@@ -325,8 +325,8 @@ def optim_morph_gradient(
             rotation,
         )
         # Return negative score for minimization
-        # score = rmse_score(morphed_edges_grayscale, goal_edges_blurred)
-        score = -match_score(morphed_edges_grayscale, goal_edges_blurred)
+        score = rmse_score(morphed_edges_grayscale, goal_edges_blurred)
+        # score = -match_score(morphed_edges_grayscale, goal_edges_blurred)
 
         if score < best_score:
             best_score = score
@@ -363,7 +363,7 @@ def optim_morph_gradient(
     result = minimize(
         objective_function,
         x0,
-        method="L-BFGS-B",  # Good for bounded optimization
+        method="Nelder-Mead",
         bounds=bounds,
         options={"maxiter": 100, "disp": False, "eps": epsilon},
     )

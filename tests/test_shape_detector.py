@@ -6,7 +6,7 @@ from circlapse.image_operators import blur_and_normalize
 from circlapse.shape_detector import (
     detect_edges,
     match_score,
-    optim_morph,
+    optim_morph_grid,
     optim_morph_gradient,
     rmse_score,
 )
@@ -211,7 +211,7 @@ class TestOptimMorph:
         edges_binary.data[5:15, 5:15] = True  # White square in center
         goal_edges_binary = edges_binary.copy()
 
-        optimized_edges_binary, best_score, best_params = optim_morph(
+        optimized_edges_binary, best_score, best_params = optim_morph_grid(
             edges_binary, goal_edges_binary
         )
 
@@ -255,7 +255,7 @@ class TestOptimMorph:
         goal_edges_binary = goal_edges_uint8.to_type(BinaryImage)
 
         # Run optimization
-        optimized_edges_binary, best_score, best_params = optim_morph(
+        optimized_edges_binary, best_score, best_params = optim_morph_grid(
             edges_binary, goal_edges_binary
         )
 
@@ -300,8 +300,8 @@ class TestOptimMorph:
         # Apply a known transformation to create goal_edges
         start_params = {
             "x_shift": 0,
-            "y_shift": 0,
-            "scale": 0.7,
+            "y_shift": 10,
+            "scale": 1,
             "tilt_x": 0,
             "tilt_y": 0,
             "rotation": 0,

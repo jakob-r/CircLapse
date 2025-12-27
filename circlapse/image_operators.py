@@ -331,6 +331,6 @@ def blur_and_normalize(image: BinaryImage, kernel_size: int = 5) -> GrayscaleIma
     else:
         normalized = blurred
     # Ensure original white pixels remain white (glow effect)
-    blurred_weight = 0.5
+    blurred_weight = 0.8
     result = np.maximum(normalized * blurred_weight, image_data)
     return GrayscaleImage.from_numpy(result.astype(np.uint8))
