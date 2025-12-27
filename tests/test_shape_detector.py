@@ -296,12 +296,15 @@ class TestOptimMorph:
             255  # White square in center (32x32 square)
         )
         edges_binary = detect_edges(grayscale_image, 2.0, 0.5, 1.5)
+        from circlapse.image_operators import expand_white_pixels
+
+        edges_binary = expand_white_pixels(edges_binary, kernel_size=3)
 
         # Apply a known transformation to create goal_edges
         start_params = {
-            "x_shift": 0,
-            "y_shift": 10,
-            "scale": 1,
+            "x_shift": 5,
+            "y_shift": 5,
+            "scale": 1.1,
             "tilt_x": 0,
             "tilt_y": 0,
             "rotation": 0,
@@ -321,7 +324,7 @@ class TestOptimMorph:
         # Test gradient-based optimization
 
         optimized_edges_grad, best_score_grad, best_params_grad = optim_morph_gradient(
-            start_image_binary, edges_binary
+            start_image_binary, edges_binary, method="cma"
         )
 
         # Should find a good match

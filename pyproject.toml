@@ -5,6 +5,7 @@ description = "A library for detecting circles in images and centering them"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cma>=4.4.1",
     "numpy>=2.3.1",
     "numpydantic>=1.6.9",
     "opencv-python>=4.11.0.86",

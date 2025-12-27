@@ -6,8 +6,8 @@ from circlapse.image_types import GrayscaleImage, RGBImage
 
 def morph_image(
     image: GrayscaleImage | RGBImage,
-    x_shift: int,
-    y_shift: int,
+    x_shift: float,
+    y_shift: float,
     scale: float,
     tilt_x: float,
     tilt_y: float,
@@ -31,37 +31,67 @@ def morph_image(
         Morphed image (same type as input, uint8)
     """
 
-    morphed_image = apply_advanced_transform(
-        image.data, rotation, scale, tilt_x, tilt_y, x_shift, y_shift
+    h, w = image.data.shape[:2]
+    M = get_transform_matrix(
+        image.data.shape, rotation, scale, tilt_x, tilt_y, x_shift, y_shift
+    )
+    morphed = cv2.warpPerspective(
+        image.data, M, (w, h), flags=cv2.INTER_LINEAR, borderValue=0
     )
 
     result_type = type(image)
-    return result_type.from_numpy(morphed_image)
+    return result_type.from_numpy(morphed)
 
 
-def apply_advanced_transform(
-    img, angle=0, scale=1.0, tilt_x=0.0, tilt_y=0.0, shift_x=0, shift_y=0
-):
-    h, w = img.shape[:2]
+def revert_morph_image(
+    image: GrayscaleImage | RGBImage,
+    x_shift: float,
+    y_shift: float,
+    scale: float,
+    tilt_x: float,
+    tilt_y: float,
+    rotation: float,
+) -> GrayscaleImage | RGBImage:
+    """
+    Reverse a morph transformation.
+    Pass the SAME parameters that were used in the original morph_image call.
+    """
+    h, w = image.data.shape[:2]
+    M = get_transform_matrix(
+        image.data.shape, rotation, scale, tilt_x, tilt_y, x_shift, y_shift
+    )
+    M_inv = np.linalg.inv(M)
+    reverted = cv2.warpPerspective(
+        image.data, M_inv, (w, h), flags=cv2.INTER_LINEAR, borderValue=0
+    )
+
+    result_type = type(image)
+    return result_type.from_numpy(reverted)
+
+
+def get_transform_matrix(
+    img_shape: tuple[int, ...],
+    angle: float = 0,
+    scale: float = 1.0,
+    tilt_x: float = 0.0,
+    tilt_y: float = 0.0,
+    shift_x: float = 0,
+    shift_y: float = 0,
+) -> np.ndarray:
+    """Calculate the transformation matrix without applying it."""
+    h, w = img_shape[:2]
     center = (w / 2, h / 2)
 
-    # --- 1. Generate Affine Matrix (Rotate + Scale) ---
-    # getRotationMatrix2D creates a 2x3 matrix
+    # Affine Matrix (Rotate + Scale)
     M_affine = cv2.getRotationMatrix2D(center, angle, scale)
-
-    # We need to convert it to a 3x3 matrix to combine it with perspective
-    # Add a row [0, 0, 1] at the bottom
     M_affine_3x3 = np.vstack([M_affine, [0, 0, 1]])
 
-    # --- 2. Generate Perspective Matrix (Tilt) ---
+    # Perspective Matrix (Tilt + Shift)
     src_points = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
     dst_points = np.copy(src_points)
-
-    # Apply Shift
     dst_points[:, 0] += shift_x
     dst_points[:, 1] += shift_y
 
-    # Apply Tilt (Squeeze corners)
     if tilt_x != 0:
         squeeze = w * abs(tilt_x) * 0.5
         if tilt_x > 0:  # Top back
@@ -80,17 +110,5 @@ def apply_advanced_transform(
             dst_points[0, 1] += squeeze
             dst_points[2, 1] -= squeeze
 
-    # Calculate Perspective Matrix
     M_perspective = cv2.getPerspectiveTransform(src_points, dst_points)
-
-    # --- 3. Combine Matrices ---
-    # Matrix Multiplication: Perspective @ Affine
-    # This applies Affine (Scale/Rot) first, THEN Perspective (Tilt/Shift)
-    M_final = np.dot(M_perspective, M_affine_3x3)
-
-    # --- 4. Apply Final Transform ---
-    # Note: We use warpPerspective even though we have rotation,
-    # because the final matrix is 3x3
-    return cv2.warpPerspective(
-        img, M_final, (w, h), flags=cv2.INTER_LINEAR, borderValue=0
-    )
+    return np.dot(M_perspective, M_affine_3x3)

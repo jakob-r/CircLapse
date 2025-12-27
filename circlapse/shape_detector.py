@@ -210,108 +210,83 @@ def optim_morph_grid(
 def optim_morph_gradient(
     edges_binary: BinaryImage,
     goal_edges_binary: BinaryImage,
+    method: str = "differential_evolution",
+    maxiter: int = 100,
+    popsize: int = 15,
+    save_iterations: bool = True,
 ) -> tuple[BinaryImage, float, dict]:
     """
-    Optimize geometric transformations using gradient-based optimization.
-    Much faster than grid search for finding optimal parameters.
+    Optimize geometric transformations using global optimization methods.
+    Uses population-based methods to avoid local minima.
 
     Args:
         edges_binary: Binary edge image to optimize (bool)
         goal_edges_binary: Target binary edge image (bool)
+        method: Optimization method - one of:
+            - "differential_evolution" (default): Population-based global optimizer
+            - "basinhopping": Local optimizer with random jumps
+            - "dual_annealing": Simulated annealing approach
+            - "cma": CMA-ES (requires cma package)
+        maxiter: Maximum number of iterations/generations
+        popsize: Population size (for differential_evolution and cma)
+        save_iterations: Whether to save iteration images for debugging
 
     Returns:
         tuple: (optimized_edges_binary, best_score, best_params)
         - optimized_edges_binary: The best morphed version of edges (bool)
-        - best_score: The highest match score achieved
+        - best_score: The highest match score achieved (lower is better for RMSE)
         - best_params: Dictionary with the parameters that achieved the best score
     """
-    from scipy.optimize import minimize
+    from scipy.optimize import differential_evolution, basinhopping, dual_annealing
 
-    # Define parameter scaling factors
     img_width, img_height = edges_binary.shape
-
-    epsilon = 1e-4
-
-    # determines the first stepsize for the gradient descent in each dimension
-    param_scales = {
-        "x_shift": 5.0,
-        "y_shift": 5.0,
-        "scale": 0.1,
-        "tilt_x": 0.2,
-        "tilt_y": 0.2,
-        "rotation": 5,
-    }
-
-    param_scales = {key: value / epsilon for key, value in param_scales.items()}
 
     max_x_shift = img_width // 4
     max_y_shift = img_height // 4
-    max_scale_range = 0.5  # scale from 0.8 to 1.2 (1.0 ± 0.2)
+    max_scale_range = 0.5  # scale from 0.5 to 1.5 (1.0 ± 0.5)
     max_tilt = 0.4
     max_rotation = 15  # degrees
 
-    # Calculate normalized bounds
-    param_bounds = {
-        "x_shift": (-max_x_shift, max_x_shift),
-        "y_shift": (-max_y_shift, max_y_shift),
-        "scale": (-max_scale_range, max_scale_range),
-        "tilt_x": (-max_tilt, max_tilt),
-        "tilt_y": (-max_tilt, max_tilt),
-        "rotation": (-max_rotation, max_rotation),
-    }
-
-    param_bounds = {
-        key: (value[0] / param_scales[key], value[1] / param_scales[key])
-        for key, value in param_bounds.items()
-    }
+    # Bounds in actual parameter space (not normalized)
+    param_bounds = [
+        (-max_x_shift, max_x_shift),  # x_shift
+        (-max_y_shift, max_y_shift),  # y_shift
+        (1.0 - max_scale_range, 1.0 + max_scale_range),  # scale
+        (-max_tilt, max_tilt),  # tilt_x
+        (-max_tilt, max_tilt),  # tilt_y
+        (-max_rotation, max_rotation),  # rotation
+    ]
 
     goal_edges_blurred = image_operators.blur_and_normalize(
-        goal_edges_binary, kernel_size=img_width // 4 * 2 + 1
+        goal_edges_binary, kernel_size=img_width // 4 * 2 + 1, blur_weight=0.99
     )
 
-    # Create timestamped folder for this optimization run and set it as output_dir
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    timestamped_folder = Path(output_dir.get()) / f"optimization_{timestamp}"
-    timestamped_folder.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Saving optimization iterations to: {timestamped_folder}")
-
-    # Save original output_dir and set new one for this optimization
-    original_output_dir = output_dir.get()
-    output_dir.set(timestamped_folder)
+    # Create timestamped folder for this optimization run
+    timestamped_folder = None
+    original_output_dir = None
+    if save_iterations:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamped_folder = Path(output_dir.get()) / f"optimization_{timestamp}"
+        timestamped_folder.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Saving optimization iterations to: {timestamped_folder}")
+        original_output_dir = output_dir.get()
+        output_dir.set(timestamped_folder)
 
     iteration_count = 0
     best_score = float("inf")
-    best_params = None
+    best_params_array = None
     best_iteration = None
 
     def objective_function(params):
-        """Objective function to minimize (negative match score)."""
-        nonlocal iteration_count
-        nonlocal best_score
-        nonlocal best_params
-        nonlocal best_iteration
+        """Objective function to minimize (RMSE score)."""
+        nonlocal iteration_count, best_score, best_params_array, best_iteration
         iteration_count += 1
 
-        # Transform parameters from [-1, 1] range to actual parameter ranges
-        (
-            x_shift_norm,
-            y_shift_norm,
-            scale_norm,
-            tilt_x_norm,
-            tilt_y_norm,
-            rotation_norm,
-        ) = params
-
-        # Transform normalized parameters to actual parameter ranges
-        x_shift = x_shift_norm * param_scales["x_shift"]
-        y_shift = y_shift_norm * param_scales["y_shift"]
-        scale = 1.0 + scale_norm * param_scales["scale"]
-        tilt_x = tilt_x_norm * param_scales["tilt_x"]
-        tilt_y = tilt_y_norm * param_scales["tilt_y"]
-        rotation = rotation_norm * param_scales["rotation"]
+        x_shift, y_shift, scale, tilt_x, tilt_y, rotation = params
 
         logger.debug(
-            f"Trying parameters: x_shift={x_shift}, y_shift={y_shift}, scale={scale}, tilt_x={tilt_x}, tilt_y={tilt_y}, rotation={rotation}"
+            f"Trying parameters: x_shift={x_shift:.2f}, y_shift={y_shift:.2f}, "
+            f"scale={scale:.3f}, tilt_x={tilt_x:.3f}, tilt_y={tilt_y:.3f}, rotation={rotation:.2f}"
         )
 
         # Apply transformation
@@ -324,81 +299,184 @@ def optim_morph_gradient(
             tilt_y,
             rotation,
         )
-        # Return negative score for minimization
         score = rmse_score(morphed_edges_grayscale, goal_edges_blurred)
-        # score = -match_score(morphed_edges_grayscale, goal_edges_blurred)
 
         if score < best_score:
             best_score = score
-            best_params = params
+            best_params_array = params.copy()
             best_iteration = iteration_count
+            logger.info(f"New best score: {score:.4f} at iteration {iteration_count}")
 
-        # for debugging, save annotated comparison
-        text = (
-            f"iter: {iteration_count} (best: {best_iteration})\n"
-            f"score: {score:.3f} (best: {best_score:.3f})\n"
-            f"x: {x_shift:.2f}, y: {y_shift:.2f}\n"
-            f"scale: {scale:.3f}\n"
-            f"tilt: ({tilt_x:.2f}, {tilt_y:.2f})\n"
-            f"rot: {rotation:.2f}"
-        )
-        save_multi_jpg_with_text(
-            [morphed_edges_grayscale, goal_edges_blurred],
-            [text, "goal"],
-            f"iter_{iteration_count:04d}.jpg",
-        )
-        logger.debug(f"Score: {score:.4f}")
+        # Save iteration image for debugging
+        if save_iterations:
+            text = (
+                f"iter: {iteration_count} (best: {best_iteration})\n"
+                f"score: {score:.3f} (best: {best_score:.3f})\n"
+                f"x: {x_shift:.2f}, y: {y_shift:.2f}\n"
+                f"scale: {scale:.3f}\n"
+                f"tilt: ({tilt_x:.2f}, {tilt_y:.2f})\n"
+                f"rot: {rotation:.2f}"
+            )
+            save_multi_jpg_with_text(
+                [morphed_edges_grayscale, goal_edges_blurred],
+                [text, "goal"],
+                f"iter_{iteration_count:04d}.jpg",
+            )
+
         return score
 
-    # Convert param_bounds dict to list in the correct order
-    param_order = ["x_shift", "y_shift", "scale", "tilt_x", "tilt_y", "rotation"]
-    bounds = [param_bounds[param] for param in param_order]
+    logger.info(f"Starting optimization with method: {method}")
 
-    # Initial guess (no transformation) - all zeros correspond to no transformation
-    x0 = [0] * len(param_scales)
+    # Run the selected optimization method
+    if method == "differential_evolution":
+        result = differential_evolution(
+            objective_function,
+            bounds=param_bounds,
+            maxiter=maxiter,
+            popsize=popsize,
+            mutation=(0.5, 1.0),
+            recombination=0.7,
+            seed=42,
+            disp=False,
+            polish=True,  # Use local optimizer to polish final result
+            updating="deferred",  # Better for parallel evaluation
+            workers=1,  # Set to -1 for parallel (but loses iteration saving order)
+        )
+        final_params = result.x
+        final_score = result.fun
+        success = result.success
+        message = result.message
 
-    logger.info("Starting gradient-based optimization...")
+    elif method == "basinhopping":
+        # Start from center of bounds
+        x0 = [(b[0] + b[1]) / 2 for b in param_bounds]
 
-    # Run optimization
-    result = minimize(
-        objective_function,
-        x0,
-        method="Nelder-Mead",
-        bounds=bounds,
-        options={"maxiter": 100, "disp": False, "eps": epsilon},
-    )
+        # Custom step function to respect bounds
+        class BoundedStep:
+            def __init__(self, bounds, stepsize=0.5):
+                self.bounds = bounds
+                self.stepsize = stepsize
 
-    if not result.success:
-        logger.warning(f"Optimization may not have converged: {result.message}")
+            def __call__(self, x):
+                ranges = [b[1] - b[0] for b in self.bounds]
+                new_x = (
+                    x
+                    + np.random.uniform(-self.stepsize, self.stepsize, len(x)) * ranges
+                )
+                # Clip to bounds
+                for i, (low, high) in enumerate(self.bounds):
+                    new_x[i] = np.clip(new_x[i], low, high)
+                return new_x
 
-    # Extract best parameters and transform back to original parameter space
-    x_shift_norm, y_shift_norm, scale_norm, tilt_x_norm, tilt_y_norm, rotation_norm = (
-        result.x
-    )
+        result = basinhopping(
+            objective_function,
+            x0,
+            niter=maxiter,
+            T=1.0,
+            stepsize=0.3,
+            minimizer_kwargs={
+                "method": "L-BFGS-B",
+                "bounds": param_bounds,
+            },
+            take_step=BoundedStep(param_bounds),
+            seed=42,
+        )
+        final_params = result.x
+        final_score = result.fun
+        success = True  # basinhopping doesn't have success attribute
+        message = f"Completed {maxiter} basin-hopping iterations"
+
+    elif method == "dual_annealing":
+        result = dual_annealing(
+            objective_function,
+            bounds=param_bounds,
+            maxiter=maxiter,
+            seed=42,
+            no_local_search=False,
+        )
+        final_params = result.x
+        final_score = result.fun
+        success = result.success
+        message = result.message
+
+    elif method == "cma":
+        try:
+            import cma
+        except ImportError:
+            raise ImportError(
+                "CMA-ES requires the 'cma' package. Install with: pip install cma"
+            )
+
+        # Start from center of bounds
+        x0 = [(b[0] + b[1]) / 2 for b in param_bounds]
+        # Initial standard deviation (roughly 1/4 of each range)
+        sigma0 = 0.25
+
+        # Scale parameters to [0, 1] for CMA-ES
+        def scale_to_unit(params):
+            return [(p - b[0]) / (b[1] - b[0]) for p, b in zip(params, param_bounds)]
+
+        def scale_from_unit(params):
+            return [p * (b[1] - b[0]) + b[0] for p, b in zip(params, param_bounds)]
+
+        def objective_scaled(params_unit):
+            params = scale_from_unit(params_unit)
+            return objective_function(np.array(params))
+
+        x0_unit = scale_to_unit(x0)
+
+        es = cma.CMAEvolutionStrategy(
+            x0_unit,
+            sigma0,
+            {
+                "bounds": [0, 1],
+                "maxiter": maxiter,
+                "popsize": popsize,
+                "seed": 42,
+                "verbose": -9,  # Suppress output
+            },
+        )
+        es.optimize(objective_scaled)
+
+        final_params = np.array(scale_from_unit(es.result.xbest))
+        final_score = es.result.fbest
+        success = not es.stop()
+        message = f"CMA-ES terminated: {es.stop()}"
+
+    else:
+        raise ValueError(
+            f"Unknown optimization method: {method}. "
+            f"Choose from: differential_evolution, basinhopping, dual_annealing, cma"
+        )
+
+    if not success:
+        logger.warning(f"Optimization may not have converged: {message}")
+
+    # Extract best parameters
+    x_shift, y_shift, scale, tilt_x, tilt_y, rotation = final_params
 
     best_params = {
-        "x_shift": x_shift_norm * param_scales["x_shift"],
-        "y_shift": y_shift_norm * param_scales["y_shift"],
-        "scale": 1.0 + scale_norm * param_scales["scale"],
-        "tilt_x": tilt_x_norm * param_scales["tilt_x"],
-        "tilt_y": tilt_y_norm * param_scales["tilt_y"],
-        "rotation": rotation_norm * param_scales["rotation"],
+        "x_shift": float(x_shift),
+        "y_shift": float(y_shift),
+        "scale": float(scale),
+        "tilt_x": float(tilt_x),
+        "tilt_y": float(tilt_y),
+        "rotation": float(rotation),
     }
-
-    best_score = -result.fun  # Convert back from negative
 
     # Apply best transformation to get final result
     best_edges = morph_image(edges_binary.to_type(GrayscaleImage), **best_params)
 
     logger.info(
-        f"Gradient optimization complete. Best score: {best_score:.4f} with params: {best_params}"
+        f"Optimization complete ({method}). Best score: {final_score:.4f} with params: {best_params}"
     )
-    logger.info(f"Optimization iterations: {result.nit}")
+    logger.info(f"Total function evaluations: {iteration_count}")
 
     # Restore original output_dir
-    output_dir.set(original_output_dir)
+    if original_output_dir is not None:
+        output_dir.set(original_output_dir)
 
-    return best_edges.to_type(BinaryImage), best_score, best_params
+    return best_edges.to_type(BinaryImage), final_score, best_params
 
 
 def shape_detector(
