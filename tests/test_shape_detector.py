@@ -5,11 +5,11 @@ from circlapse.generators import create_circle_outline_image
 from circlapse.image_operators import add_noise, blur_and_normalize
 from circlapse.shape_detector import (
     detect_edges,
-    distance_transform_score,
     match_score,
     optim_morph_grid,
     optim_morph_gradient,
     rmse_score,
+    score,
 )
 from circlapse.morph import morph_image, revert_morph_image
 from circlapse.image_types import BinaryImage, GrayscaleImage
@@ -226,13 +226,13 @@ def test_morph_revert_e2e_score():
         background_color=0,
     )
 
-    score_theoretical_end_image = distance_transform_score(
+    score_theoretical_end_image = score(
         theoretical_end_image_edges.to_type(BinaryImage), target_edges
     )
-    score_start_image_edges = distance_transform_score(
+    score_start_image_edges = score(
         start_image_edges.to_type(BinaryImage), target_edges
     )
-    score_target_edges = distance_transform_score(
+    score_target_edges = score(
         target_edges.to_type(BinaryImage), target_edges.to_type(BinaryImage)
     )
 
@@ -358,7 +358,7 @@ class TestOptimMorph:
         )
 
         # add noise to the start image
-        start_image = add_noise(start_image, 0.2, 3)
+        start_image = add_noise(start_image, 0.2, 1)
 
         start_image_binary = detect_edges(start_image, 2.0, 4.0, 16.0)
 
@@ -373,7 +373,7 @@ class TestOptimMorph:
             **start_params,
             background_color=66,
         )
-        theoretical_end_image_score = distance_transform_score(
+        theoretical_end_image_score = score(
             theoretical_end_image_edges.to_type(BinaryImage),
             edges_binary,
             mask=BinaryImage.from_numpy(start_image_binary.data == 66),
@@ -404,8 +404,15 @@ class TestOptimMorph:
             os.path.join(output_dir, "edges_grad.jpg"),
             os.path.join(output_dir, "goal_edges_grad.jpg"),
             os.path.join(output_dir, "optimized_edges_grad.jpg"),
+            os.path.join(output_dir, "theoretical_end_image_edges.jpg"),
         ]
-        images = [start_image, start_image_binary, edges_binary, optimized_edges_grad]
+        images = [
+            start_image,
+            start_image_binary,
+            edges_binary,
+            optimized_edges_grad,
+            theoretical_end_image_edges,
+        ]
 
         save_jpg(images, filenames)
 

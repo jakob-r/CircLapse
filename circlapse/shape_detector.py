@@ -127,6 +127,78 @@ def distance_transform_score(
     return loss
 
 
+def asymmetric_distance_loss(
+    edges: BinaryImage,
+    target_edges: BinaryImage,
+    mask: BinaryImage | None = None,
+    lambda_weight: float = 0.5,
+) -> float:
+    """
+    Calculate an asymmetric distance loss between two edge images.
+    Low loss is better.
+
+    This loss has two components:
+    1. Precision Loss: Punishes input edge pixels that are far from target edges.
+       Noise pixels get a huge penalty here.
+    2. Coverage Loss: Ensures we actually overlap with the target (using Dice).
+
+    Args:
+        edges: Binary edge image to score (bool)
+        target_edges: Target binary edge image (bool)
+        mask: If given, masked pixels contribute a penalty proportional to the mask size.
+              The bigger the mask, the bigger the punishment (through mean calculation).
+        lambda_weight: Weight between precision (1.0) and coverage (0.0) loss. Default 0.5.
+
+    Returns:
+        Combined loss value (lower is better)
+    """
+    if mask is None:
+        mask = BinaryImage.blank((edges.shape[0], edges.shape[1]))
+
+    mask_data = mask.data
+    inds_outside = np.where(mask_data)
+
+    # 1. Compute distance map of the TARGET only
+    # Invert target because distance_transform_edt computes distance to False pixels
+    inv_target = np.logical_not(target_edges.data)
+    dist_target = distance_transform_edt(inv_target)
+
+    # 2. Precision Loss: Punish input edge pixels that are far from target
+    edges_float = edges.data.astype(np.float32)
+    precision_map = edges_float * dist_target
+
+    # Apply mask penalty: masked regions get a large penalty
+    # The bigger the mask, the bigger the penalty contribution (through the mean)
+    mask_penalty_value = np.min(edges.shape)
+    precision_map[inds_outside] = mask_penalty_value
+
+    precision_loss = np.mean(precision_map)
+
+    # 3. Coverage Loss: Use Dice to ensure we actually overlap with target
+    # For masked regions, treat them as non-edges for dice calculation
+    edges_for_dice = edges.data.copy()
+    target_for_dice = target_edges.data.copy()
+    edges_for_dice[inds_outside] = False
+    target_for_dice[inds_outside] = False
+
+    intersection = np.sum(edges_for_dice & target_for_dice)
+    dice_score = (2.0 * intersection) / (
+        np.sum(edges_for_dice) + np.sum(target_for_dice) + 1e-6
+    )
+    coverage_loss = 1.0 - dice_score
+
+    # Combine losses
+    return (lambda_weight * precision_loss) + ((1 - lambda_weight) * coverage_loss)
+
+
+def score(
+    edges: BinaryImage,
+    target_edges: BinaryImage,
+    mask: BinaryImage | None = None,
+) -> float:
+    return asymmetric_distance_loss(edges, target_edges, mask=mask)
+
+
 def optim_morph_grid(
     edges_binary: BinaryImage,
     goal_edges_binary: BinaryImage,
@@ -328,21 +400,23 @@ def optim_morph_gradient(
             background_color=morph_bg_color,
         )
         mask = BinaryImage.from_numpy(morphed_edges_grayscale.data == morph_bg_color)
-        score = distance_transform_score(
+        new_score = score(
             morphed_edges_grayscale.to_type(BinaryImage), goal_edges_binary, mask=mask
         )
 
-        if score < best_score:
-            best_score = score
+        if new_score < best_score:
+            best_score = new_score
             best_params_array = params.copy()
             best_iteration = iteration_count
-            logger.info(f"New best score: {score:.4f} at iteration {iteration_count}")
+            logger.info(
+                f"New best score: {new_score:.4f} at iteration {iteration_count}"
+            )
 
         # Save iteration image for debugging
         if save_iterations:
             text = (
                 f"iter: {iteration_count} (best: {best_iteration})\n"
-                f"score: {score:.3f} (best: {best_score:.3f})\n"
+                f"score: {new_score:.3f} (best: {best_score:.3f})\n"
                 f"x: {x_shift:.2f}, y: {y_shift:.2f}\n"
                 f"scale: {scale:.3f}\n"
                 f"tilt: ({tilt_x:.2f}, {tilt_y:.2f})\n"
@@ -354,7 +428,7 @@ def optim_morph_gradient(
                 f"iter_{iteration_count:04d}.jpg",
             )
 
-        return score
+        return new_score
 
     logger.info(f"Starting optimization with method: {method}")
 
