@@ -373,10 +373,11 @@ class TestOptimMorph:
             **start_params,
             background_color=66,
         )
+        # mask=True means include in scoring (valid pixels, not background)
         theoretical_end_image_score = score(
             theoretical_end_image_edges.to_type(BinaryImage),
             edges_binary,
-            mask=BinaryImage.from_numpy(start_image_binary.data == 66),
+            mask=BinaryImage.from_numpy(theoretical_end_image_edges.data != 66),
         )
 
         # Should find a good match

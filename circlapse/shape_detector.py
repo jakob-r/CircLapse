@@ -110,20 +110,48 @@ def distance_transform_score(
     Args:
         edges: Binary edge image to score (bool)
         target_edges: Target binary edge image (bool)
-        mask: If given, we will only score the distance transform of the edges that are not masked.
+        mask: If given, only pixels where mask is True are included in scoring.
+              Pixels where mask is False receive a penalty.
     """
     if mask is None:
-        mask = BinaryImage.blank((edges.shape[0], edges.shape[1]))
-    # inds_inside = np.where(np.logical_not(mask.data))
-    inds_outside = np.where(mask.data)
+        mask = BinaryImage.from_numpy(np.ones(edges.shape, dtype=bool))
+    inds_excluded = np.where(~mask.data)
     dist_input = distance_transform_edt(np.logical_not(edges.data))
     dist_target = distance_transform_edt(np.logical_not(target_edges.data))
     dist_diff = dist_input - dist_target
-    # cv2.imwrite("dist_diff.jpg", np.clip(dist_diff * 200, 0, 255).astype(np.uint8))
-    # cv2.imwrite("dist_input.jpg", np.clip(dist_input * 200, 0, 255).astype(np.uint8))
-    # cv2.imwrite("dist_target.jpg", np.clip(dist_target * 10, 0, 255).astype(np.uint8))
-    dist_diff[inds_outside] = np.min(edges.shape)
+    dist_diff[inds_excluded] = np.min(edges.shape)
     loss = np.mean(np.square(dist_diff))
+    return loss
+
+
+def local_distance_transform_score(
+    edges: BinaryImage,
+    target_edges: BinaryImage,
+    mask: BinaryImage | None = None,
+    local_radius: int = 10,
+) -> float:
+    """
+    Calculate the distance transform score between two edge images.
+    But only evaluate the distance transform around the target edges.
+    Low local distance transform score is better.
+
+    Args:
+        edges: Binary edge image to score (bool)
+        target_edges: Target binary edge image (bool)
+        mask: If given, only pixels where mask is True are included in scoring.
+              Pixels where mask is False receive a penalty.
+        local_radius: Only evaluate within this distance of target edges.
+    """
+    if mask is None:
+        mask = BinaryImage.from_numpy(np.ones(edges.shape, dtype=bool))
+    dist_input = distance_transform_edt(np.logical_not(edges.data))
+    dist_target = distance_transform_edt(np.logical_not(target_edges.data))
+    target_mask = dist_target < local_radius
+    dist_diff = dist_input - dist_target
+    inds_excluded = np.where(~mask.data)
+    dist_diff[inds_excluded] = np.min(edges.shape)
+    inds_target_mask = np.where(target_mask)
+    loss = np.mean(np.square(dist_diff[inds_target_mask]))
     return loss
 
 
@@ -145,18 +173,18 @@ def asymmetric_distance_loss(
     Args:
         edges: Binary edge image to score (bool)
         target_edges: Target binary edge image (bool)
-        mask: If given, masked pixels contribute a penalty proportional to the mask size.
-              The bigger the mask, the bigger the punishment (through mean calculation).
+        mask: If given, only pixels where mask is True are included in scoring.
+              Pixels where mask is False receive a penalty.
         lambda_weight: Weight between precision (1.0) and coverage (0.0) loss. Default 0.5.
 
     Returns:
         Combined loss value (lower is better)
     """
     if mask is None:
-        mask = BinaryImage.blank((edges.shape[0], edges.shape[1]))
+        mask = BinaryImage.from_numpy(np.ones(edges.shape, dtype=bool))
 
     mask_data = mask.data
-    inds_outside = np.where(mask_data)
+    inds_excluded = np.where(~mask_data)
 
     # 1. Compute distance map of the TARGET only
     # Invert target because distance_transform_edt computes distance to False pixels
@@ -167,19 +195,19 @@ def asymmetric_distance_loss(
     edges_float = edges.data.astype(np.float32)
     precision_map = edges_float * dist_target
 
-    # Apply mask penalty: masked regions get a large penalty
-    # The bigger the mask, the bigger the penalty contribution (through the mean)
+    # Apply penalty to excluded regions (mask=False)
+    # The bigger the excluded area, the bigger the penalty contribution (through the mean)
     mask_penalty_value = np.min(edges.shape)
-    precision_map[inds_outside] = mask_penalty_value
+    precision_map[inds_excluded] = mask_penalty_value
 
     precision_loss = np.mean(precision_map)
 
     # 3. Coverage Loss: Use Dice to ensure we actually overlap with target
-    # For masked regions, treat them as non-edges for dice calculation
+    # For excluded regions, treat them as non-edges for dice calculation
     edges_for_dice = edges.data.copy()
     target_for_dice = target_edges.data.copy()
-    edges_for_dice[inds_outside] = False
-    target_for_dice[inds_outside] = False
+    edges_for_dice[inds_excluded] = False
+    target_for_dice[inds_excluded] = False
 
     intersection = np.sum(edges_for_dice & target_for_dice)
     dice_score = (2.0 * intersection) / (
@@ -196,7 +224,7 @@ def score(
     target_edges: BinaryImage,
     mask: BinaryImage | None = None,
 ) -> float:
-    return asymmetric_distance_loss(edges, target_edges, mask=mask)
+    return local_distance_transform_score(edges, target_edges, mask=mask)
 
 
 def optim_morph_grid(
@@ -399,7 +427,8 @@ def optim_morph_gradient(
             rotation,
             background_color=morph_bg_color,
         )
-        mask = BinaryImage.from_numpy(morphed_edges_grayscale.data == morph_bg_color)
+        # mask=True means include in scoring (valid pixels, not background)
+        mask = BinaryImage.from_numpy(morphed_edges_grayscale.data != morph_bg_color)
         new_score = score(
             morphed_edges_grayscale.to_type(BinaryImage), goal_edges_binary, mask=mask
         )
