@@ -1,0 +1,569 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "circlapse annotator",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/images": {
+      "get": {
+        "summary": "List Images",
+        "operationId": "list_images_api_images_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImageInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Images Api Images Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/thumb/{name}": {
+      "get": {
+        "summary": "Thumb",
+        "operationId": "thumb_api_thumb__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/image/{name}": {
+      "get": {
+        "summary": "Image",
+        "operationId": "image_api_image__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/labels/{name}": {
+      "get": {
+        "summary": "Get Label",
+        "operationId": "get_label_api_labels__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageLabel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Put Label",
+        "operationId": "put_label_api_labels__name__put",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageLabel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageLabel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/predictions/{name}": {
+      "get": {
+        "summary": "Get Prediction",
+        "operationId": "get_prediction_api_predictions__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ImageLabel"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Prediction Api Predictions  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fit": {
+      "post": {
+        "summary": "Fit",
+        "operationId": "fit_api_fit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ellipse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "No Frontend",
+        "operationId": "no_frontend__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Ellipse": {
+        "properties": {
+          "cx": {
+            "type": "number",
+            "title": "Cx"
+          },
+          "cy": {
+            "type": "number",
+            "title": "Cy"
+          },
+          "a": {
+            "type": "number",
+            "title": "A"
+          },
+          "b": {
+            "type": "number",
+            "title": "B"
+          },
+          "angle_deg": {
+            "type": "number",
+            "title": "Angle Deg",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "cx",
+          "cy",
+          "a",
+          "b"
+        ],
+        "title": "Ellipse"
+      },
+      "FitRequest": {
+        "properties": {
+          "points": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "points"
+        ],
+        "title": "FitRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ImageInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unlabeled",
+              "labeled",
+              "no_ellipse",
+              "skip"
+            ],
+            "title": "Status"
+          },
+          "n_ellipses": {
+            "type": "integer",
+            "title": "N Ellipses"
+          },
+          "prominent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ellipse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "predicted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Ellipse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "width",
+          "height",
+          "status",
+          "n_ellipses",
+          "prominent",
+          "predicted"
+        ],
+        "title": "ImageInfo"
+      },
+      "ImageLabel": {
+        "properties": {
+          "ellipses": {
+            "items": {
+              "$ref": "#/components/schemas/ScoredEllipse"
+            },
+            "type": "array",
+            "title": "Ellipses"
+          },
+          "prominent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prominent"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unlabeled",
+              "labeled",
+              "no_ellipse",
+              "skip"
+            ],
+            "title": "Status",
+            "default": "unlabeled"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "human",
+              "synth",
+              "detector"
+            ],
+            "title": "Source",
+            "default": "human"
+          },
+          "runtime_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime S"
+          }
+        },
+        "type": "object",
+        "title": "ImageLabel"
+      },
+      "ScoredEllipse": {
+        "properties": {
+          "cx": {
+            "type": "number",
+            "title": "Cx"
+          },
+          "cy": {
+            "type": "number",
+            "title": "Cy"
+          },
+          "a": {
+            "type": "number",
+            "title": "A"
+          },
+          "b": {
+            "type": "number",
+            "title": "B"
+          },
+          "angle_deg": {
+            "type": "number",
+            "title": "Angle Deg",
+            "default": 0.0
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cx",
+          "cy",
+          "a",
+          "b"
+        ],
+        "title": "ScoredEllipse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "annotator",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "circlapse", "annotate", "data/real", "--no-open", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+[project]
+name = "circlapse"
+version = "0.2.0"
+description = "Detect the most prominent ellipse in photos and align them into a circle hyperlapse"
+readme = "CONCEPT.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "numpy>=2.1",
+    "opencv-python-headless>=4.10",
+    "pillow>=11.0",
+    "pydantic>=2.9",
+    "typer>=0.15",
+    "uvicorn>=0.32",
+]
+
+[project.scripts]
+circlapse = "circlapse.cli:app"
+
+[dependency-groups]
+dev = [
+    "httpx2>=0.1",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/circlapse"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["old_version", "frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "NPY"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+check_untyped_defs = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["cv2.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--tb=short"]
