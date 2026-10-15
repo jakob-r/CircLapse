@@ -27,6 +27,10 @@ Acceptable:
 - We can drop some pictures if we cannot find a good ellipse in them.
 - Detection of an ellipse should take less then 5 seconds per picture.
 - Ellipses smaller then 1/3rd of the image size don't need to be detected.
+- Which ellipse is the "most prominent" is subjective, also during annotation.
+  Objects often consist of several (nearly) concentric ellipses, e.g. glass, frame and wall of a round window.
+  If the algorithm finds one of the other annotated ellipses instead of the one marked as most prominent, or a slightly scaled down or scaled up version of it, that is still a pretty good result.
+  What matters most for the animation is that center, aspect ratio and rotation are right, because then the rectification and alignment work.
 
 ## Tooling
 
