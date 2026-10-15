@@ -358,7 +358,7 @@ class TestOptimMorph:
         )
 
         # add noise to the start image
-        start_image = add_noise(start_image, 0.2, 1)
+        start_image = add_noise(start_image, 0.2, 2)
 
         start_image_binary = detect_edges(start_image, 2.0, 4.0, 16.0)
 

@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from circlapse.disk_image import DiskImage
-from circlapse.image_types import GrayscaleImage, RGBImage, BinaryImage
+from circlapse.image_types import GenericImage, GrayscaleImage, RGBImage, BinaryImage
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,41 @@ def scale_image(rgb_image: RGBImage, target_width: int) -> RGBImage:
     scaled_image = cv2.resize(rgb_image, (target_width, new_height))
 
     return scaled_image
+
+
+def crop_scale[T: GenericImage](image: T, width: int, height: int) -> T:
+    """
+    Crop and scale an image to fit the target dimensions using a cover strategy.
+
+    The image is scaled so that it completely covers the target dimensions,
+    then center-cropped to exactly match width x height.
+
+    Args:
+        image: Input image (any GenericImage subtype)
+        width: Target width
+        height: Target height
+
+    Returns:
+        Image of the same type, cropped and scaled to width x height
+    """
+    img_height, img_width = image.shape[:2]
+
+    # Calculate scale factor to cover the target dimensions
+    scale_x = width / img_width
+    scale_y = height / img_height
+    scale_factor = max(scale_x, scale_y)
+
+    # Scale the image
+    new_width = int(img_width * scale_factor)
+    new_height = int(img_height * scale_factor)
+    scaled_data = cv2.resize(image.data, (new_width, new_height))
+
+    # Center crop to target dimensions
+    crop_x = (new_width - width) // 2
+    crop_y = (new_height - height) // 2
+    cropped_data = scaled_data[crop_y : crop_y + height, crop_x : crop_x + width]
+
+    return type(image).from_numpy(cropped_data)
 
 
 def circle_share(rgb_image: RGBImage, circle: tuple[int, int, int]) -> float:

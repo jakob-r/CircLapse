@@ -47,6 +47,21 @@ def detect_edges(
 
     return BinaryImage.from_numpy(edges)
 
+def detect_edges_optimized(
+    grayscale_image: GrayscaleImage,
+) -> BinaryImage:
+    """
+    Detect edges in a grayscale image using Canny edge detection.
+    Uses grid search to find the parameters that give the 
+    """
+    v = np.median(grayscale_image.data)
+    sigma = 0.33
+    lower = int(max(0, (1.0 - sigma) * v))
+    upper = int(min(255, (1.0 + sigma) * v))
+    blurred = cv2.GaussianBlur(grayscale_image.data, (5, 5), 0)
+    edges = cv2.Canny(blurred, lower, upper)
+    return BinaryImage.from_numpy(edges)
+
 
 def match_score(
     edges: BinaryImage | GrayscaleImage, goal_edges: BinaryImage | GrayscaleImage
@@ -128,7 +143,7 @@ def local_distance_transform_score(
     edges: BinaryImage,
     target_edges: BinaryImage,
     mask: BinaryImage | None = None,
-    local_radius: int = 10,
+    local_radius: int | None = None,
 ) -> float:
     """
     Calculate the distance transform score between two edge images.
@@ -144,8 +159,36 @@ def local_distance_transform_score(
     """
     if mask is None:
         mask = BinaryImage.from_numpy(np.ones(edges.shape, dtype=bool))
+    if local_radius is None:
+        local_radius = max(int(np.min(edges.shape) // 6), 4)
     dist_input = distance_transform_edt(np.logical_not(edges.data))
     dist_target = distance_transform_edt(np.logical_not(target_edges.data))
+    ## // DEBUG
+    # Scale dist_target to 0-255 range for saving as 8-bit grayscale image
+    dist_target_scaled = dist_target.astype(np.float32)
+    dist_input_scaled = dist_input.astype(np.float32)
+    # Normalize to 0-255 (avoid division by zero)
+    if dist_target_scaled.max() > 0:
+        dist_target_scaled = 255 * dist_target_scaled / dist_target_scaled.max()
+    dist_target_uint8 = dist_target_scaled.astype(np.uint8)
+    if dist_input_scaled.max() > 0:
+        dist_input_scaled = 255 * dist_input_scaled / dist_input_scaled.max()
+    dist_input_uint8 = dist_input_scaled.astype(np.uint8)
+    # Save the grayscale distance map
+    try:
+        from circlapse.saving import save_jpg
+        from circlapse.image_types import GrayscaleImage
+        # Compose a name indicating this is the local distance transform map.
+        import os
+        fname_target = "dist_target.jpg"
+        fname_input = "dist_input.jpg"
+        # Optionally try to save in a debug or output folder
+        save_jpg([GrayscaleImage.from_numpy(dist_target_uint8)], [fname_target])
+        save_jpg([GrayscaleImage.from_numpy(dist_input_uint8)], [fname_input])
+    except Exception as e:
+        # Do not crash if save fails
+        pass
+    ## // DEBUG
     target_mask = dist_target < local_radius
     dist_diff = dist_input - dist_target
     inds_excluded = np.where(~mask.data)
@@ -225,6 +268,8 @@ def score(
     mask: BinaryImage | None = None,
 ) -> float:
     return local_distance_transform_score(edges, target_edges, mask=mask)
+    # return distance_transform_score(edges, target_edges, mask=mask)
+    # return asymmetric_distance_loss(edges, target_edges, mask)
 
 
 def optim_morph_grid(
@@ -724,22 +769,37 @@ def shape_detector(
 
 
 if __name__ == "__main__":
-    grayscale_image = GrayscaleImage.blank((64, 64))
-    # draw a circle in the center
-    cv2.circle(grayscale_image.data, (32, 32), 16, 255, -1)
+    dimension = 128
+    input_image = cv2.imread("examples/example_in/later/squareandcircle.jpeg")
+    input_image_rgb = RGBImage.from_numpy(input_image)
+    input_image_cropped = image_operators.crop_scale(input_image_rgb, dimension, dimension)
+    
+    target_image = GrayscaleImage.blank((dimension, dimension))
+    # square that covers 3/4 of the image
+    square_size = int((3 / 4) * dimension)
+    offset = (dimension - square_size) // 2
+    target_image.data[offset:offset + square_size, offset:offset + square_size] = 255
 
-    morph_params = {
-        "x_shift": 5.0,
-        "y_shift": 5.0,
-        "scale": 0.9,
-        "tilt_x": 0.0,
-        "tilt_y": 0.0,
-        "rotation": 0.0,
-    }
-    morphed_image = morph_image(grayscale_image, **morph_params, background_color=0)
+    target_edges = detect_edges(target_image, 2.0, 0.5, 1.5)
 
-    noise_image = image_operators.add_noise(morphed_image, 0.1, 0)
+    input_image_grayscale = input_image_cropped.to_type(GrayscaleImage)
+    input_image_edges = detect_edges_optimized(input_image_grayscale)
+    final_image, final_score, final_params = optim_morph_gradient(input_image_edges, target_edges)
+    
+    # transform input image 
+    transformed_image = morph_image(input_image_cropped, **final_params, background_color=0)
 
-    noise_image_rgb = noise_image.to_type(RGBImage)
+    pics = [
+        (input_image_cropped, "input_image_cropped.jpg"),
+        (target_image, "target_image.jpg"),
+        (target_edges, "target_edges.jpg"),
+        (input_image_edges, "input_image_edges.jpg"),
+        (final_image, "final_image.jpg"),
+        (transformed_image, "transformed_image.jpg"),
+    ]
 
-    shape_detector(noise_image_rgb, grayscale_image)
+    save_jpg(
+        [pic[0] for pic in pics],
+        [pic[1] for pic in pics],
+    )
+    

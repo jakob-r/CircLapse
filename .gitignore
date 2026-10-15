@@ -178,3 +178,7 @@ secrets.json
 
 # local test files
 optimization_*/
+
+# images (never track)
+*.jpg
+*.JPG
