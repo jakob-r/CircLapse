@@ -1,5 +1,8 @@
+import pytest
+
+from circlapse.ellipse import Ellipse
 from circlapse.labels import Dataset, ImageLabel, ScoredEllipse, load_labels, save_labels
-from circlapse.metrics import evaluate
+from circlapse.metrics import evaluate, rectification_error, tolerance_score
 
 E = ScoredEllipse(cx=50, cy=50, a=30, b=20, angle_deg=10)
 
@@ -31,8 +34,12 @@ def test_dataset_rejects_paths_outside(tmp_path):
 
 def test_evaluate_outcomes():
     far = ScoredEllipse(cx=200, cy=200, a=30, b=20)
+    inner = ScoredEllipse(cx=50, cy=50, a=24, b=16, angle_deg=10)  # concentric, 0.8x
+    wall = ScoredEllipse(cx=50, cy=50, a=45, b=30, angle_deg=10)  # concentric, 1.5x
     gt = {
         "hit": ImageLabel(ellipses=[E], prominent=0, status="labeled"),
+        "other": ImageLabel(ellipses=[E, wall], prominent=0, status="labeled"),
+        "good": ImageLabel(ellipses=[E], prominent=0, status="labeled"),
         "miss": ImageLabel(ellipses=[E], prominent=0, status="labeled"),
         "dropped": ImageLabel(ellipses=[E], prominent=0, status="labeled"),
         "fp": ImageLabel(status="no_ellipse"),
@@ -40,11 +47,48 @@ def test_evaluate_outcomes():
     }
     pred = {
         "hit": ImageLabel(ellipses=[E], prominent=0, status="labeled", runtime_s=0.5),
+        "other": ImageLabel(ellipses=[wall], prominent=0, status="labeled"),
+        "good": ImageLabel(ellipses=[inner], prominent=0, status="labeled"),
         "miss": ImageLabel(ellipses=[far], prominent=0, status="labeled"),
         "fp": ImageLabel(ellipses=[E], prominent=0, status="labeled"),
     }
     summary = evaluate(gt, pred)
     outcomes = {r.name: r.outcome for r in summary.results}
-    assert outcomes == {"hit": "hit", "miss": "miss", "dropped": "dropped", "fp": "false_positive"}
-    assert summary.hit_rate == 1 / 3
-    assert "hit rate" in summary.format()
+    assert outcomes == {
+        "hit": "hit",
+        "other": "hit",
+        "good": "good",
+        "miss": "miss",
+        "dropped": "dropped",
+        "fp": "false_positive",
+    }
+    other = next(r for r in summary.results if r.name == "other")
+    assert other.matched == 1 and not other.strict_hit
+    assert summary.hit_rate == 2 / 5
+    assert summary.good_rate == 3 / 5
+    assert summary.strict_hit_rate == 1 / 5
+    assert "good rate" in summary.format()
+
+
+def test_rectification_error():
+    e = Ellipse(cx=0, cy=0, a=30, b=15, angle_deg=40)
+    # independent of position and scale
+    assert rectification_error(e, Ellipse(cx=9, cy=-3, a=60, b=30, angle_deg=40)) == pytest.approx(
+        0, abs=1e-9
+    )
+    # predicting a circle leaves the annotated aspect ratio untouched
+    circle = Ellipse(cx=0, cy=0, a=10, b=10)
+    assert rectification_error(e, circle) == pytest.approx(0.5)
+    # for near-circles the angle hardly matters
+    near = Ellipse(cx=0, cy=0, a=100, b=99, angle_deg=0)
+    assert rectification_error(near, near.model_copy(update={"angle_deg": 90})) < 0.03
+    # but for eccentric ellipses it does
+    assert rectification_error(e, e.model_copy(update={"angle_deg": 130})) > 0.5
+
+
+def test_tolerance_score():
+    e = Ellipse(cx=0, cy=0, a=20, b=20)
+    assert tolerance_score(e, e) == 0
+    assert tolerance_score(e, Ellipse(cx=1, cy=0, a=22, b=22)) <= 1
+    assert tolerance_score(e, Ellipse(cx=5, cy=0, a=20, b=20)) > 1
+    assert tolerance_score(e, Ellipse(cx=0, cy=0, a=40, b=40)) > 1

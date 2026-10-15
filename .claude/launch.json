@@ -4,8 +4,32 @@
     {
       "name": "annotator",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "circlapse", "annotate", "data/real", "--no-open", "--port", "8000"],
+      "runtimeArgs": [
+        "run",
+        "circlapse",
+        "annotate",
+        "data/real",
+        "--no-open",
+        "--port",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "annotator-nn",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "circlapse",
+        "annotate",
+        "data/real",
+        "--pred",
+        "data/predictions/nn.json",
+        "--no-open",
+        "--port",
+        "8001"
+      ],
+      "port": 8001
     }
   ]
 }

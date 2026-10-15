@@ -17,6 +17,12 @@ dependencies = [
 [project.scripts]
 circlapse = "circlapse.cli:app"
 
+[project.optional-dependencies]
+ml = [
+    "timm>=1.0.30",
+    "torch>=2.14.1",
+]
+
 [dependency-groups]
 dev = [
     "httpx2>=0.1",

@@ -185,6 +185,7 @@ optimization_*/
 
 # v2
 /data/
+/checkpoints/
 node_modules/
 frontend/dist/
 .thumbs/
