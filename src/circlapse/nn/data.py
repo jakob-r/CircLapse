@@ -118,14 +118,34 @@ def _visible(e: Ellipse, size: int, margin: float = 0.02) -> bool:
     return x0 >= lo and y0 >= lo and x1 <= hi and y1 <= hi and e.b > 0.05 * size
 
 
+def _lighting(rng: np.random.Generator, h: int, w: int) -> np.ndarray:
+    """Smooth multiplicative light field: low-frequency gradient, sometimes a vignette."""
+    coarse = rng.uniform(-1, 1, (3, 3)).astype(np.float32)
+    field = 1 + rng.uniform(0.1, 0.4) * cv2.resize(coarse, (w, h), interpolation=cv2.INTER_CUBIC)
+    if rng.random() < 0.3:
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        r2 = ((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2
+        field *= 1 - rng.uniform(0.1, 0.4) * r2 / 2
+    return field[..., None]
+
+
 def _photometric(rng: np.random.Generator, img: np.ndarray) -> np.ndarray:
     out = img.astype(np.float32)
+    if rng.random() < 0.5:  # hue rotation: hue rarely says which ellipse is the target
+        hsv = cv2.cvtColor(out / 255, cv2.COLOR_RGB2HSV)  # float32: H in [0, 360)
+        hsv[..., 0] = (hsv[..., 0] + rng.uniform(0, 360)) % 360
+        out = np.asarray(cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB) * 255, np.float32)
+    if rng.random() < 0.5:  # gamma, i.e. a non-linear exposure change
+        gamma = rng.uniform(0.6, 1.6)
+        out = np.asarray(255 * (np.clip(out, 0, 255) / 255) ** gamma, np.float32)
     if rng.random() < 0.8:  # brightness / contrast / per-channel gain
         out = (out - 128) * rng.uniform(0.6, 1.4) + 128 + rng.uniform(-40, 40)
         out *= rng.uniform(0.85, 1.15, 3).astype(np.float32)
-    if rng.random() < 0.5:  # saturation
+    if rng.random() < 0.4:  # local lighting: shadows, glare, vignetting
+        out *= _lighting(rng, *out.shape[:2])
+    if rng.random() < 0.5:  # saturation; not near zero, which would erase hue-only edges
         gray = out.mean(axis=2, keepdims=True)
-        out = gray + (out - gray) * rng.uniform(0.0, 1.6)
+        out = gray + (out - gray) * rng.uniform(0.3, 1.6)
     if rng.random() < 0.3:
         out = np.asarray(cv2.GaussianBlur(out, (0, 0), rng.uniform(0.3, 1.5)), np.float32)
     if rng.random() < 0.3:
