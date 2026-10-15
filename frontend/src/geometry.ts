@@ -98,3 +98,23 @@ export function zoomAt(view: { scale: number; x: number; y: number }, p: Point, 
     y: p.y - (p.y - view.y) * factor,
   };
 }
+
+/**
+ * Keep the image inside the viewport: an axis where the scaled image is smaller than the
+ * viewport is centered, otherwise the image may not leave a gap at either edge.
+ */
+export function clampView(
+  view: { scale: number; x: number; y: number },
+  w: number,
+  h: number,
+  vw: number,
+  vh: number,
+) {
+  const axis = (offset: number, image: number, viewport: number) =>
+    image <= viewport ? (viewport - image) / 2 : Math.min(0, Math.max(viewport - image, offset));
+  return {
+    scale: view.scale,
+    x: axis(view.x, w * view.scale, vw),
+    y: axis(view.y, h * view.scale, vh),
+  };
+}

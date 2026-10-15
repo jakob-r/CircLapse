@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Circle, Ellipse as KEllipse, Image as KImage, Layer, Stage } from "react-konva";
 import type { ScoredEllipse } from "../api";
 import {
+  clampView,
   fitView,
   handles,
   moveCenter,
@@ -33,6 +34,8 @@ interface Props {
   onAcceptPrediction: (e: Ellipse) => void;
   onAddPoint: (p: Point) => void;
 }
+
+const MAX_SCALE = 40;
 
 const COLORS = {
   prominent: "#22e07a",
@@ -66,7 +69,10 @@ export function EllipseCanvas(props: Props) {
     userView?.key === fitKey
       ? userView.view
       : fitView(width, height, size.width || 1, size.height || 1);
-  const setView = (fn: (v: View) => View) => setUserView({ key: fitKey, view: fn(view) });
+  const clamp = (v: View) => clampView(v, width, height, size.width, size.height);
+  const setView = (fn: (v: View) => View) =>
+    setUserView({ key: fitKey, view: clamp(fn(view)) });
+  const minScale = fitView(width, height, size.width || 1, size.height || 1).scale * 0.5;
 
   const px = 1 / view.scale; // one screen pixel in image coordinates
 
@@ -74,7 +80,20 @@ export function EllipseCanvas(props: Props) {
     evt.evt.preventDefault();
     const pointer = evt.target.getStage()?.getPointerPosition();
     if (!pointer) return;
-    setView((v) => zoomAt(v, pointer, Math.exp(-evt.evt.deltaY * 0.0015)));
+    const { deltaX, deltaY, ctrlKey, metaKey } = evt.evt;
+    if (ctrlKey || metaKey) {
+      // Trackpad pinch (reported as ctrl+wheel) or cmd/ctrl + mouse wheel: zoom at the pointer.
+      setView((v) => {
+        const factor = Math.min(
+          Math.max(Math.exp(-deltaY * 0.01), minScale / v.scale),
+          MAX_SCALE / v.scale,
+        );
+        return zoomAt(v, pointer, factor);
+      });
+    } else {
+      // Two-finger trackpad scroll: pan.
+      setView((v) => ({ ...v, x: v.x - deltaX, y: v.y - deltaY }));
+    }
   };
 
   const onStageClick = (evt: Konva.KonvaEventObject<MouseEvent>) => {
@@ -123,6 +142,10 @@ export function EllipseCanvas(props: Props) {
         x={view.x}
         y={view.y}
         draggable
+        dragBoundFunc={(pos) => {
+          const v = clamp({ ...view, x: pos.x, y: pos.y });
+          return { x: v.x, y: v.y };
+        }}
         onDragEnd={(e) => {
           if (e.target === e.target.getStage()) {
             setView((v) => ({ ...v, x: e.target.x(), y: e.target.y() }));
