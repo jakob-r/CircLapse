@@ -51,8 +51,9 @@ Training images should feature
   Synthetic ellipses (prominent ones and distractors) are capped at an eccentricity of 0.6 (axis ratio 0.8), a bit above what we observed, also after the perspective warp.
   Training on much flatter ellipses wastes capacity on cases that do not occur.
 - A realistic eccentricity distribution, not only a cap.
-  The prominent ellipse's eccentricity is drawn from |N(0, 0.18)|, and perspective jitter (in generation and training augmentation) is kept at 1% of the image side.
-  With uniform aspect ratios and 3–8% perspective jitter, the training targets were about twice as eccentric as the real labels (mean 0.38–0.45 vs 0.18), and the network predicted too eccentric ellipses on real photos.
+  The prominent ellipse's eccentricity is drawn from |N(0, 0.18)| and the perspective jitter during generation is 1% of the image side.
+  Training augmentation keeps its stronger perspective jitter (3% synthetic, 8% real): reducing it to 1% did not make predictions rounder and scored lower in cross-validation.
+  Predictions are still too eccentric (axis ratio 0.93 vs 0.98 in the labels), because fitting an ellipse to the predicted mask is noisy; the detector pulls them towards a circle instead (`Ellipse.rounded`, see RESULTS.md).
 - Ellipses as "filled" objects and as "outlines"
 
 ## Thoughts
