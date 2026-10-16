@@ -1,4 +1,4 @@
-"""Command line interface: ``circlapse synth | annotate | train | detect | eval | organize``."""
+"""Command line interface: ``circlapse synth | annotate | train | runs | detect | eval``, more."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ import typer
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 train_app = typer.Typer(no_args_is_help=True, help="Train the neural network detector.")
 app.add_typer(train_app, name="train")
+runs_app = typer.Typer(no_args_is_help=True, help="Track training runs in runs/ and RESULTS.md.")
+app.add_typer(runs_app, name="runs")
 
 CHECKPOINTS = Path("checkpoints")
 
@@ -127,15 +129,21 @@ def detect(
     head: Annotated[str, typer.Option(help="mask (fit to predicted mask) or params")] = "mask",
     min_confidence: Annotated[float, typer.Option(help="Drop images below this")] = 0.0,
     tta: Annotated[bool, typer.Option(help="Horizontal flip test-time augmentation")] = True,
+    roundness: Annotated[
+        float | None,
+        typer.Option(help="Pull ellipses towards a circle: 0 off, 1 circle [default: tuned]"),
+    ] = None,
 ) -> None:
     """Detect the prominent ellipse in every image of DATA."""
     from circlapse.detect import run_detector
+    from circlapse.detect.base import DEFAULT_ROUNDNESS
     from circlapse.detect.nn import NNDetector
     from circlapse.labels import Dataset
 
+    roundness = DEFAULT_ROUNDNESS if roundness is None else roundness
     if head not in ("mask", "params"):
         raise typer.BadParameter("head must be mask or params")
-    detector = NNDetector(checkpoint, head, min_confidence, tta)  # type: ignore[arg-type]
+    detector = NNDetector(checkpoint, head, min_confidence, tta, roundness)  # type: ignore[arg-type]
     preds = run_detector(detector, Dataset(data), out)
     runtimes = sorted(p.runtime_s or 0 for p in preds.values())
     dropped = sum(not p.ellipses for p in preds.values())
@@ -226,6 +234,40 @@ def organize(
         return
     apply_moves(data, moves, folders)
     typer.echo(f"moved {len(moves)} photos in {data}")
+
+
+@runs_app.command("start")
+def runs_start(
+    run: Annotated[Path, typer.Argument(help="New run folder, e.g. runs/<date>_<commit>")],
+    note: Annotated[str, typer.Option(help="What changed in this run")] = "",
+) -> None:
+    """Create a run folder and record the git commit and training settings."""
+    from circlapse.runs import start
+
+    start(run, note)
+    typer.echo(f"started {run}")
+
+
+@runs_app.command("record")
+def runs_record(
+    run: Annotated[Path, typer.Argument(help="Run folder with cv_mask.json / cv_params.json")],
+    gt: Annotated[Path, typer.Option(help="Ground truth labels.json")] = Path(
+        "data/real/labels.json"
+    ),
+) -> None:
+    """Score a run's held-out CV predictions and add a row to RESULTS.md."""
+    from circlapse.runs import record
+
+    typer.echo(record(run, gt), nl=False)
+
+
+@runs_app.command("use")
+def runs_use(run: Annotated[Path, typer.Argument(help="Run folder")]) -> None:
+    """Copy a run's checkpoints to checkpoints/ to make them the current model."""
+    from circlapse.runs import use
+
+    use(run, CHECKPOINTS)
+    typer.echo(f"checkpoints/ now holds the model of {run}")
 
 
 def _log(msg: str) -> None:

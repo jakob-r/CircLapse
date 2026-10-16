@@ -3,9 +3,13 @@ PRED ?=
 N ?= 1000
 NAME ?= nn
 CKPT ?= checkpoints/finetune.pt
+NOTE ?=
+ifndef RUN
+RUN := $(shell date +%Y-%m-%d_%H%M)_$(shell git rev-parse --short HEAD)
+endif
 FRONTEND_SRC := $(shell find frontend/src -type f) frontend/index.html frontend/package.json frontend/vite.config.ts
 
-.PHONY: help install install-ml dev build annotate synth synth-train pretrain finetune train detect eval api-types test lint clean
+.PHONY: help install install-ml dev build annotate synth synth-train pretrain finetune train experiment record use detect eval api-types test lint clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -51,6 +55,20 @@ finetune: ## Fine-tune on data/real labels with 5-fold CV -> checkpoints/finetun
 	uv run --extra ml circlapse train finetune
 
 train: pretrain finetune ## Pretrain and fine-tune the NN
+
+experiment: ## Train into runs/RUN, make it current and add its CV scores to RESULTS.md (NOTE="what changed")
+	uv run --extra ml circlapse runs start runs/$(RUN) --note "$(NOTE)"
+	uv run --extra ml circlapse train pretrain --out runs/$(RUN)/pretrain.pt > runs/$(RUN)/pretrain.log 2>&1
+	uv run --extra ml circlapse train finetune --init runs/$(RUN)/pretrain.pt \
+		--out runs/$(RUN)/finetune.pt --cv-out runs/$(RUN)/cv.json > runs/$(RUN)/finetune.log 2>&1
+	uv run circlapse runs record runs/$(RUN)
+	uv run circlapse runs use runs/$(RUN)
+
+record: ## Re-score runs/RUN against the current labels and update its row in RESULTS.md
+	uv run circlapse runs record runs/$(RUN)
+
+use: ## Make runs/RUN the current model (copies its checkpoints to checkpoints/)
+	uv run circlapse runs use runs/$(RUN)
 
 detect: ## Predict DATA with CKPT -> data/predictions/NAME.json
 	uv run --extra ml circlapse detect $(DATA) --checkpoint $(CKPT) --out data/predictions/$(NAME).json

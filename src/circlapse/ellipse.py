@@ -82,6 +82,16 @@ class Ellipse(BaseModel):
     def eccentricity(self) -> float:
         return math.sqrt(max(0.0, 1.0 - self.aspect**2))
 
+    def rounded(self, strength: float) -> Ellipse:
+        """Move the axis ratio towards a circle (0: unchanged, 1: circle) at equal area.
+
+        Noisy axis estimates make near-circles look too eccentric, and real targets are
+        mostly near-circular, so detectors shrink predictions towards a circle.
+        """
+        aspect = self.aspect ** (1.0 - strength)
+        a = math.sqrt(self.a * self.b / aspect) if aspect > 0 else self.a
+        return Ellipse(cx=self.cx, cy=self.cy, a=a, b=a * aspect, angle_deg=self.angle_deg)
+
     def sample_points(self, n: int = 64) -> np.ndarray:
         """``n`` points on the rim, shape (n, 2)."""
         t = np.linspace(0, 2 * np.pi, n, endpoint=False)

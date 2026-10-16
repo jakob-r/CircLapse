@@ -53,3 +53,14 @@ def test_metrics_helpers():
     assert e.mean_radius == pytest.approx(10)
     assert e.center_error(Ellipse(cx=10, cy=0, a=20, b=5)) == pytest.approx(1.0)
     assert e.rel_size((120, 200, 3)) == pytest.approx(40 / 120)
+
+
+def test_rounded_keeps_area_and_center():
+    e = Ellipse(cx=10, cy=20, a=50, b=40, angle_deg=30)
+    assert e.rounded(0.0).aspect == pytest.approx(e.aspect)
+    assert e.rounded(1.0).aspect == pytest.approx(1.0)
+    half = e.rounded(0.5)
+    assert e.aspect < half.aspect < 1.0
+    for r in (e.rounded(0.0), half, e.rounded(1.0)):
+        assert r.a * r.b == pytest.approx(e.a * e.b)
+        assert (r.cx, r.cy) == (e.cx, e.cy)

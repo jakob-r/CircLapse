@@ -10,6 +10,9 @@ import numpy as np
 
 from circlapse.labels import Dataset, ImageLabel, ScoredEllipse, load_image, save_labels
 
+# Strength of Ellipse.rounded for predictions; chosen on held-out CV predictions, see RESULTS.md
+DEFAULT_ROUNDNESS = 0.75
+
 
 class Detector(Protocol):
     name: str
