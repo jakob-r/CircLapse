@@ -45,6 +45,14 @@ We need a script that generates synthetic images with ellipses in them.
 Training images should feature
 - Noise
 - Ellipses with different scaling, rotation, position and aspect ratio
+- A realistic upper limit for the eccentricity.
+  Real photos are taken roughly frontal, so the ellipses are only mildly skewed:
+  in our annotated data the largest eccentricity is 0.48 (minor/major axis ratio 0.88) and the median is about 0.18.
+  Synthetic ellipses (prominent ones and distractors) are capped at an eccentricity of 0.6 (axis ratio 0.8), a bit above what we observed, also after the perspective warp.
+  Training on much flatter ellipses wastes capacity on cases that do not occur.
+- A realistic eccentricity distribution, not only a cap.
+  The prominent ellipse's eccentricity is drawn from |N(0, 0.18)|, and perspective jitter (in generation and training augmentation) is kept at 1% of the image side.
+  With uniform aspect ratios and 3–8% perspective jitter, the training targets were about twice as eccentric as the real labels (mean 0.38–0.45 vs 0.18), and the network predicted too eccentric ellipses on real photos.
 - Ellipses as "filled" objects and as "outlines"
 
 ## Thoughts

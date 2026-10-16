@@ -78,6 +78,10 @@ class Ellipse(BaseModel):
     def aspect(self) -> float:
         return self.b / self.a if self.a > 0 else 0.0
 
+    @property
+    def eccentricity(self) -> float:
+        return math.sqrt(max(0.0, 1.0 - self.aspect**2))
+
     def sample_points(self, n: int = 64) -> np.ndarray:
         """``n`` points on the rim, shape (n, 2)."""
         t = np.linspace(0, 2 * np.pi, n, endpoint=False)

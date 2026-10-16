@@ -26,10 +26,14 @@ class SynthConfig:
     min_major: float = 0.35  # relative to image side
     max_major: float = 0.8
     padding: float = 0.1  # the prominent ellipse stays this far (relative) from every border
-    min_aspect: float = 0.4
+    # real photos are roughly frontal: annotated ellipses reach at most ~0.48, see CONCEPT.md
+    max_eccentricity: float = 0.6
+    # prominent eccentricity ~ |N(0, scale)|, near-circular like the real labels (median 0.18)
+    eccentricity_scale: float = 0.18
     max_distractors: int = 5
     style_weights: tuple[float, float, float] = (0.3, 0.35, 0.35)  # filled, outline, rings
-    perspective: float = 0.08  # max corner jitter relative to image side
+    # max corner jitter relative to image side; small, since it makes circles eccentric
+    perspective: float = 0.01
     noise: bool = True
 
 
@@ -93,6 +97,17 @@ def _draw(img: np.ndarray, e: Ellipse, color: Color, thickness: int = -1) -> Non
     cv2.ellipse(img, e.to_cv_box(), color, thickness, cv2.LINE_AA)
 
 
+def _min_aspect(max_eccentricity: float) -> float:
+    """Smallest minor/major axis ratio allowed by ``max_eccentricity``."""
+    return float(np.sqrt(1.0 - max_eccentricity**2))
+
+
+def _prominent_aspect(rng: np.random.Generator, cfg: SynthConfig) -> float:
+    """Minor/major axis ratio of the prominent ellipse, skewed towards circles."""
+    ecc = min(abs(rng.normal(0.0, cfg.eccentricity_scale)), cfg.max_eccentricity)
+    return float(np.sqrt(1.0 - ecc**2))
+
+
 def _random_ellipse(
     rng: np.random.Generator, size: int, min_major: float, max_major: float, min_aspect: float
 ) -> Ellipse:
@@ -117,7 +132,11 @@ def _prominent_ellipse(rng: np.random.Generator, cfg: SynthConfig) -> Ellipse:
     size, pad = cfg.size, cfg.padding * cfg.size
     a = rng.uniform(cfg.min_major, cfg.max_major) * size / 2
     shape = Ellipse(
-        cx=0, cy=0, a=a, b=a * rng.uniform(cfg.min_aspect, 1.0), angle_deg=rng.uniform(0, 180)
+        cx=0,
+        cy=0,
+        a=a,
+        b=a * _prominent_aspect(rng, cfg),
+        angle_deg=rng.uniform(0, 180),
     )
     x0, y0, x1, y1 = shape.bbox()
     # shrink if the rotated bounding box does not fit into the padded area
@@ -184,9 +203,11 @@ def _perspective(
     ellipses: list[Ellipse],
     strength: float,
     padding: float,
+    max_eccentricity: float,
     attempts: int = 20,
 ) -> tuple[np.ndarray, list[Ellipse]]:
-    """Random homography that keeps the prominent ellipse (index 0) inside the padding."""
+    """Random homography that keeps the prominent ellipse (index 0) inside the padding and
+    every ellipse within ``max_eccentricity``."""
     size = img.shape[0]
     src = np.array([[0, 0], [size, 0], [size, size], [0, size]], dtype=np.float32)
     for _ in range(attempts):
@@ -196,7 +217,7 @@ def _perspective(
         for e in ellipses:
             pts = cv2.perspectiveTransform(e.sample_points(64)[None].astype(np.float32), h)[0]
             out.append(Ellipse.from_points(pts))  # projective image of an ellipse is an ellipse
-        if _inside(out[0], size, padding):
+        if _inside(out[0], size, padding) and all(e.eccentricity <= max_eccentricity for e in out):
             warped = cv2.warpPerspective(img, h, (size, size), borderMode=cv2.BORDER_REFLECT)
             return warped, out
     return img, ellipses
@@ -223,7 +244,7 @@ def generate(rng: np.random.Generator, cfg: SynthConfig) -> tuple[np.ndarray, Im
     img = _background(rng, size)
 
     distractors = [
-        _random_ellipse(rng, size, 0.05, 0.3, 0.3)
+        _random_ellipse(rng, size, 0.05, 0.3, _min_aspect(cfg.max_eccentricity))
         for _ in range(rng.integers(0, cfg.max_distractors + 1))
     ]
     below = [d for d in distractors if rng.random() < 0.5]
@@ -242,7 +263,9 @@ def generate(rng: np.random.Generator, cfg: SynthConfig) -> tuple[np.ndarray, Im
     ellipses += distractors
 
     if cfg.perspective > 0:
-        img, ellipses = _perspective(rng, img, ellipses, cfg.perspective, cfg.padding)
+        img, ellipses = _perspective(
+            rng, img, ellipses, cfg.perspective, cfg.padding, cfg.max_eccentricity
+        )
     if cfg.noise:
         img = _photometric(rng, img)
 

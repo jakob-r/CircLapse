@@ -25,7 +25,9 @@ def synth(
     """Generate synthetic images with labeled ellipses."""
     from circlapse.synth import SynthConfig, generate_dataset
 
-    cfg = SynthConfig(size=size, noise=not clean, perspective=0.0 if clean else 0.08)
+    cfg = SynthConfig(
+        size=size, noise=not clean, perspective=0.0 if clean else SynthConfig.perspective
+    )
     generate_dataset(out, n, cfg, seed)
     typer.echo(f"wrote {n} images to {out}")
 

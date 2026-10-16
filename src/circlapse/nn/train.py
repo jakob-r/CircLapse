@@ -29,8 +29,9 @@ from circlapse.nn.model import EllipseNet, ModelConfig, device, load_checkpoint,
 
 Log = Callable[[str], None]
 
-SYNTH_AUG = Augment(scale=(0.85, 1.15), rotate=180, shift=0.08, perspective=0.03)
-REAL_AUG = Augment(scale=(0.7, 1.3), rotate=180, shift=0.15, perspective=0.08)
+# small perspective jitter: stronger warps made targets about twice as eccentric as real labels
+SYNTH_AUG = Augment(scale=(0.85, 1.15), rotate=180, shift=0.08, perspective=0.01)
+REAL_AUG = Augment(scale=(0.7, 1.3), rotate=180, shift=0.15, perspective=0.01)
 
 
 def loss_fn(

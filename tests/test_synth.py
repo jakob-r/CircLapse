@@ -43,3 +43,10 @@ def test_generate_dataset(tmp_path):
     labels = load_labels(tmp_path / "labels.json")
     assert sorted(labels) == [f"synth_{i:06d}.jpg" for i in range(3)]
     assert all((tmp_path / n).exists() for n in labels)
+
+
+def test_eccentricity_is_capped():
+    cfg = SynthConfig(size=256, max_eccentricity=0.6)
+    for seed in range(200):
+        _, label = generate(np.random.default_rng(seed), cfg)
+        assert all(e.eccentricity <= 0.6 + 1e-6 for e in label.ellipses)
