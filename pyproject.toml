@@ -18,6 +18,12 @@ dependencies = [
 circlapse = "circlapse.cli:app"
 
 [project.optional-dependencies]
+geo = [
+    "reverse-geocode>=1.6",
+]
+photos = [
+    "osxphotos>=0.70",
+]
 ml = [
     "timm>=1.0.30",
     "torch>=2.14.1",
@@ -54,7 +60,7 @@ warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["cv2.*"]
+module = ["cv2.*", "reverse_geocode", "osxphotos"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

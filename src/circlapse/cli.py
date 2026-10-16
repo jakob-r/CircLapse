@@ -1,7 +1,8 @@
-"""Command line interface: ``circlapse synth | annotate | train | detect | eval``."""
+"""Command line interface: ``circlapse synth | annotate | train | detect | eval | organize``."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -143,6 +144,79 @@ def detect(
         f" median {runtimes[len(runtimes) // 2] if runtimes else 0:.2f}s,"
         f" max {max(runtimes, default=0):.2f}s per image)"
     )
+
+
+@app.command()
+def organize(
+    data: Annotated[Path, typer.Argument(help="Directory with a dump of photos")],
+    from_apple_photos: Annotated[
+        bool, typer.Option(help="First export --from-date..--to-date from Apple Photos into DATA")
+    ] = False,
+    from_date: Annotated[
+        datetime | None, typer.Option(formats=["%Y-%m-%d"], help="First day (inclusive)")
+    ] = None,
+    to_date: Annotated[
+        datetime | None, typer.Option(formats=["%Y-%m-%d"], help="Last day (inclusive)")
+    ] = None,
+    checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
+    min_confidence: Annotated[
+        float, typer.Option(help="Photos below this detector confidence go to rejected/")
+    ] = 0.5,
+    max_gap_hours: Annotated[
+        float, typer.Option(help="Start a new cluster after a longer pause between photos")
+    ] = 6.0,
+    max_km: Annotated[
+        float, typer.Option(help="Start a new cluster after a longer jump between GPS positions")
+    ] = 20.0,
+    geocode: Annotated[
+        bool, typer.Option(help="Name clusters after the place (offline, needs the geo extra)")
+    ] = True,
+    dry_run: Annotated[
+        bool, typer.Option(help="Only print what would be moved (the export still runs)")
+    ] = False,
+) -> None:
+    """Reject photos without a good ellipse and sort the rest into trip folders.
+
+    Clusters are named YYYY-MM-DD_YYYY-MM-DD_Place from EXIF time and GPS.
+    Photos without a date go to undated/.
+    --from-apple-photos needs the photos extra and Full Disk Access for the terminal.
+    """
+    from datetime import timedelta
+
+    from circlapse.detect.nn import NNDetector
+    from circlapse.organize import Photo, apply_moves, detect_all, offline_geocoder, plan_moves
+
+    fallback: dict[str, Photo] | None = None
+    if from_apple_photos:
+        if from_date is None or to_date is None:
+            raise typer.BadParameter("--from-apple-photos needs --from-date and --to-date")
+        try:
+            from circlapse.apple_photos import export_range
+        except ImportError as e:
+            raise typer.BadParameter("install the photos extra: uv sync --extra photos") from e
+        fallback = export_range(data, from_date.date(), to_date.date(), log=_log)
+        typer.echo(f"exported {len(fallback)} photos from Apple Photos to {data}")
+    if not data.is_dir():
+        raise typer.BadParameter(f"{data} is not a directory")
+    geocoder = offline_geocoder() if geocode else None
+    if geocode and geocoder is None:
+        typer.echo("reverse_geocode not installed (uv sync --extra geo), clusters get no place")
+    detector = NNDetector(checkpoint, "mask", min_confidence)
+    photos = detect_all(data, detector, log=_log, fallback=fallback)
+    accepted = [p for p in photos if p.label.ellipses]
+    rejected = [p for p in photos if not p.label.ellipses]
+    moves, folders = plan_moves(
+        accepted, rejected, timedelta(hours=max_gap_hours), max_km, geocoder
+    )
+    for folder in sorted(folders):
+        typer.echo(f"{folder}/  ({len(folders[folder])} photos)")
+    typer.echo(f"rejected/  ({len(rejected)} photos)")
+    if dry_run:
+        for move in moves:
+            typer.echo(f"  {move.src} -> {move.dst}")
+        return
+    apply_moves(data, moves, folders)
+    typer.echo(f"moved {len(moves)} photos in {data}")
 
 
 def _log(msg: str) -> None:
