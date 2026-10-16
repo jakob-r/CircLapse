@@ -3,6 +3,9 @@
 Clusters are chains in capture order: a photo joins the current cluster when it was taken at
 most ``max_gap`` after the previous photo and, if both it and the cluster's last geotagged
 photo have GPS, at most ``max_km`` away from it. Photos without GPS only use the time rule.
+Neighbouring chains separated by a longer pause (a night) are merged again when the pause is
+at most ``max_gap_same_place`` and the last geotagged photo before it and the first one after
+it are at most ``max_km`` apart; without GPS on both sides they stay separate.
 Kept photos are renamed ``YYYYMMDD-HHMMSS_<original>`` so name order is capture order, and
 every cluster folder gets a ``labels.json`` with the detected ellipses.
 """
@@ -101,7 +104,17 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * 6371.0 * math.asin(math.sqrt(h))
 
 
-def chain_clusters(photos: Iterable[Photo], max_gap: timedelta, max_km: float) -> list[list[Photo]]:
+def _distance_km(a: Photo, b: Photo) -> float:
+    assert a.lat is not None and a.lon is not None and b.lat is not None and b.lon is not None
+    return haversine_km(a.lat, a.lon, b.lat, b.lon)
+
+
+def chain_clusters(
+    photos: Iterable[Photo],
+    max_gap: timedelta,
+    max_km: float,
+    max_gap_same_place: timedelta | None = None,
+) -> list[list[Photo]]:
     """Split dated photos into chains in capture order (see module docstring)."""
     ordered = sorted((p for p in photos if p.time is not None), key=lambda p: (p.time, p.name))
     clusters: list[list[Photo]] = []
@@ -113,9 +126,7 @@ def chain_clusters(photos: Iterable[Photo], max_gap: timedelta, max_km: float) -
             assert p.time is not None and cluster[-1].time is not None
             split = p.time - cluster[-1].time > max_gap
             if not split and p.has_gps and last_gps is not None:
-                assert p.lat is not None and p.lon is not None
-                assert last_gps.lat is not None and last_gps.lon is not None
-                split = haversine_km(p.lat, p.lon, last_gps.lat, last_gps.lon) > max_km
+                split = _distance_km(p, last_gps) > max_km
         if split:
             clusters.append([p])
             last_gps = None
@@ -123,7 +134,24 @@ def chain_clusters(photos: Iterable[Photo], max_gap: timedelta, max_km: float) -
             clusters[-1].append(p)
         if p.has_gps:
             last_gps = p
-    return clusters
+    if max_gap_same_place is None:
+        return clusters
+    merged = clusters[:1]
+    for cluster in clusters[1:]:
+        prev = merged[-1]
+        assert prev[-1].time is not None and cluster[0].time is not None
+        before = next((p for p in reversed(prev) if p.has_gps), None)
+        after = next((p for p in cluster if p.has_gps), None)
+        if (
+            cluster[0].time - prev[-1].time <= max_gap_same_place
+            and before is not None
+            and after is not None
+            and _distance_km(before, after) <= max_km
+        ):
+            prev.extend(cluster)
+        else:
+            merged.append(cluster)
+    return merged
 
 
 def offline_geocoder() -> Geocoder | None:
@@ -181,12 +209,16 @@ def plan_moves(
     max_gap: timedelta,
     max_km: float,
     geocoder: Geocoder | None,
+    max_gap_same_place: timedelta | None = None,
 ) -> tuple[list[Move], dict[str, dict[str, ImageLabel]]]:
     """Moves for every photo and the ``labels.json`` content of every cluster folder."""
     moves = [Move(p.name, f"{REJECTED_DIR}/{p.name}") for p in rejected]
     folders: dict[str, dict[str, ImageLabel]] = {}
     taken: set[str] = set()
-    groups = [(cluster_name(c, geocoder), c) for c in chain_clusters(accepted, max_gap, max_km)]
+    groups = [
+        (cluster_name(c, geocoder), c)
+        for c in chain_clusters(accepted, max_gap, max_km, max_gap_same_place)
+    ]
     if undated := sorted((p for p in accepted if p.time is None), key=lambda p: p.name):
         groups.append((UNDATED_DIR, undated))
     for name, photos in groups:

@@ -168,6 +168,10 @@ def organize(
     max_km: Annotated[
         float, typer.Option(help="Start a new cluster after a longer jump between GPS positions")
     ] = 20.0,
+    max_gap_same_place_hours: Annotated[
+        float,
+        typer.Option(help="Join clusters across a longer pause if GPS says within --max-km"),
+    ] = 36.0,
     geocode: Annotated[
         bool, typer.Option(help="Name clusters after the place (offline, needs the geo extra)")
     ] = True,
@@ -206,7 +210,12 @@ def organize(
     accepted = [p for p in photos if p.label.ellipses]
     rejected = [p for p in photos if not p.label.ellipses]
     moves, folders = plan_moves(
-        accepted, rejected, timedelta(hours=max_gap_hours), max_km, geocoder
+        accepted,
+        rejected,
+        timedelta(hours=max_gap_hours),
+        max_km,
+        geocoder,
+        timedelta(hours=max_gap_same_place_hours),
     )
     for folder in sorted(folders):
         typer.echo(f"{folder}/  ({len(folders[folder])} photos)")

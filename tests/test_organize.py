@@ -72,6 +72,29 @@ def test_chain_clusters_by_location_skips_photos_without_gps():
     assert [[p.name for p in c] for c in clusters] == [["berlin1", "nogps", "berlin2"], ["potsdam"]]
 
 
+def test_chain_clusters_merges_nights_at_the_same_place():
+    night = timedelta(hours=36)
+    photos = [
+        photo("day1", 0, 50.85, 4.35),
+        photo("day1-camera", 3),  # no GPS: the last geotagged photo before the night counts
+        photo("day2-camera", 24),  # no GPS: the first geotagged photo after the night counts
+        photo("day2", 25, 50.83, 4.36),  # ~2 km away
+        photo("day4", 72, 50.83, 4.36),  # pause longer than 36 h
+        photo("antwerp", 96, 51.22, 4.40),  # ~43 km away
+        photo("nogps-a", 120),
+        photo("nogps-b", 132),  # no GPS on either side: stays separate
+    ]
+    clusters = chain_clusters(photos, GAP, 20, night)
+    assert [[p.name for p in c] for c in clusters] == [
+        ["day1", "day1-camera", "day2-camera", "day2"],
+        ["day4"],
+        ["antwerp"],
+        ["nogps-a"],
+        ["nogps-b"],
+    ]
+    assert len(chain_clusters(photos, GAP, 20)) == 6
+
+
 def test_cluster_name():
     cluster = [photo("a", 0, 1, 1), photo("b", 20, 2, 2), photo("c", 30, 2, 2), photo("d", 31)]
     places = {1: "Bad Muskau", 2: "Görlitz / Zgorzelec"}
