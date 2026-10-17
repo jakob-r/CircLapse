@@ -125,6 +125,9 @@ kbd {
   flex-wrap: wrap;
   gap: 6px;
 }
+.filters.sort {
+  align-items: center;
+}
 .filters .count {
   color: var(--muted);
   margin-left: 4px;

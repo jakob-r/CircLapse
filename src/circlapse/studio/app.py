@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -28,6 +29,7 @@ from circlapse.studio.project import (
     sync,
     usable_labels,
 )
+from circlapse.studio.similarity import SortBy, features, similarity_path
 
 PREVIEW_SIZE = 320
 
@@ -61,6 +63,10 @@ class ProjectUpdate(BaseModel):
     settings: ExportSettings
 
 
+class SortedOrder(BaseModel):
+    order: list[str]
+
+
 class ExportStatus(BaseModel):
     state: Literal["idle", "running", "done", "error"] = "idle"
     log: list[str] = []
@@ -85,6 +91,8 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     export_dir = project_dir / EXPORT_DIR
     status = ExportStatus(directory=str(export_dir))
     lock = threading.Lock()
+    # Similarity descriptors by photo, valid while its ellipse is unchanged
+    descriptors: dict[str, tuple[Ellipse, dict[SortBy, np.ndarray]]] = {}
 
     app = FastAPI(title="circlapse studio")
     app.include_router(annotation_router(store, names=lambda: project.order))
@@ -187,6 +195,30 @@ def create_studio_app(project_dir: Path) -> FastAPI:
         return FileResponse(
             dst, media_type="image/jpeg", headers={"Cache-Control": "max-age=31536000"}
         )
+
+    def descriptor(name: str, e: Ellipse) -> dict[SortBy, np.ndarray]:
+        cached = descriptors.get(name)
+        if cached is None or cached[0] != e:
+            cached = (e, features(store.display(name), e, store.size_of(name)[0]))
+            descriptors[name] = cached
+        return cached[1]
+
+    @app.get("/api/sorted")
+    def sorted_order(by: SortBy) -> SortedOrder:
+        """The project order with the photos that have a circle arranged by similarity;
+        the others keep their relative order at the end."""
+        ellipses = {}
+        for name in project.order:
+            label = dataset.label(name)
+            if label.status == "labeled" and label.prominent_ellipse is not None:
+                ellipses[name] = label.prominent_ellipse
+        names = list(ellipses)
+        with ThreadPoolExecutor() as pool:
+            descs = list(pool.map(lambda n: descriptor(n, ellipses[n]), names))
+        x = np.array([d[by] for d in descs]).reshape(len(names), -1)
+        ordered = [names[i] for i in similarity_path(x)]
+        rest = [n for n in project.order if n not in ellipses]
+        return SortedOrder(order=ordered + rest)
 
     def run_export(p: Project) -> None:
         def log(msg: str) -> None:

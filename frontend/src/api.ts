@@ -110,6 +110,14 @@ export async function saveProject(update: ProjectUpdate): Promise<ProjectInfo> {
   return toProject(await json<Schemas["ProjectInfo"]>(res));
 }
 
+export type SortBy = "color" | "geometry";
+
+/** The project order with similar photos next to each other. */
+export async function fetchSortedOrder(by: SortBy): Promise<string[]> {
+  const res = await fetch(`/api/sorted?by=${by}`);
+  return (await json<Schemas["SortedOrder"]>(res)).order;
+}
+
 export async function startExport(settings: ExportSettings): Promise<ExportStatus> {
   const res = await fetch("/api/export", {
     method: "POST",

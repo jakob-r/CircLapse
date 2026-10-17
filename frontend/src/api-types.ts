@@ -142,6 +142,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sorted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sorted Order
+         * @description The project order with the photos that have a circle arranged by similarity;
+         *     the others keep their relative order at the end.
+         */
+        get: operations["sorted_order_api_sorted_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/export": {
         parameters: {
             query?: never;
@@ -366,6 +387,11 @@ export interface components {
             angle_deg: number;
             /** Score */
             score?: number | null;
+        };
+        /** SortedOrder */
+        SortedOrder: {
+            /** Order */
+            order: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -674,6 +700,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sorted_order_api_sorted_get: {
+        parameters: {
+            query: {
+                by: "color" | "geometry";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SortedOrder"];
                 };
             };
             /** @description Validation Error */

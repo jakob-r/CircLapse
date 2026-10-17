@@ -125,3 +125,14 @@ def test_export(project):
     assert r.status_code == 200 and len(r.content) > 0
     assert c.get("/api/export/file/..%2Fproject.json").status_code == 404
     assert c.post("/api/export", json={**settings, "formats": []}).status_code == 422
+
+
+@pytest.mark.parametrize("by", ["color", "geometry"])
+def test_sorted_order_keeps_every_photo(project, by):
+    _, proj = project
+    c = TestClient(create_studio_app(proj))
+    order = c.get("/api/project").json()["order"]
+    r = c.get("/api/sorted", params={"by": by})
+    assert r.status_code == 200
+    assert sorted(r.json()["order"]) == sorted(order)
+    assert c.get("/api/sorted", params={"by": "size"}).status_code == 422

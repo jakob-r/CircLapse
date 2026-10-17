@@ -373,6 +373,50 @@
         }
       }
     },
+    "/api/sorted": {
+      "get": {
+        "summary": "Sorted Order",
+        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end.",
+        "operationId": "sorted_order_api_sorted_get",
+        "parameters": [
+          {
+            "name": "by",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "color",
+                "geometry"
+              ],
+              "type": "string",
+              "title": "By"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortedOrder"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/export": {
       "get": {
         "summary": "Export Status",
@@ -946,6 +990,22 @@
           "b"
         ],
         "title": "ScoredEllipse"
+      },
+      "SortedOrder": {
+        "properties": {
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order"
+        ],
+        "title": "SortedOrder"
       },
       "ValidationError": {
         "properties": {

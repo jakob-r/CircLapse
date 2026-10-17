@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import {
+  fetchSortedOrder,
   saveProject,
   useImages,
   useProject,
@@ -8,6 +9,7 @@ import {
   type PhotoInfo,
   type ProjectInfo,
   type ProjectUpdate,
+  type SortBy,
 } from "../api";
 import { moveItem, setExcluded, sortByDate } from "../projectOps";
 import { imageRoute } from "../routes";
@@ -153,6 +155,8 @@ export function Studio() {
   const [exporting, setExporting] = useState(false);
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [sorting, setSorting] = useState<SortBy | null>(null);
+  const [sortError, setSortError] = useState<string | null>(null);
   const name = project.data?.name;
   useEffect(() => {
     if (name) document.title = `${name} · circlapse`;
@@ -170,6 +174,19 @@ export function Studio() {
 
   const exclude = (name: string, on: boolean) =>
     update((u) => ({ ...u, excluded: setExcluded(u.excluded, name, on) }));
+
+  const sortBySimilarity = async (by: SortBy) => {
+    setSorting(by);
+    setSortError(null);
+    try {
+      const order = await fetchSortedOrder(by);
+      update((u) => ({ ...u, order }));
+    } catch (e) {
+      setSortError(String(e));
+    } finally {
+      setSorting(null);
+    }
+  };
 
   const drop = (to: number) => {
     if (dragged === null) return;
@@ -214,9 +231,29 @@ export function Studio() {
             Aligned
           </button>
         </nav>
-        <button onClick={() => update((u) => ({ ...u, order: sortByDate(u.order, p.photos) }))}>
-          Sort by date
-        </button>
+        <nav className="filters sort" aria-label="Sort photos">
+          <span className="meta">Sort by</span>
+          <button
+            disabled={sorting !== null}
+            onClick={() => update((u) => ({ ...u, order: sortByDate(u.order, p.photos) }))}
+          >
+            Date
+          </button>
+          <button
+            disabled={sorting !== null}
+            title="Similar colors next to each other"
+            onClick={() => void sortBySimilarity("color")}
+          >
+            {sorting === "color" ? "Sorting…" : "Color"}
+          </button>
+          <button
+            disabled={sorting !== null}
+            title="Similar patterns inside the circle next to each other"
+            onClick={() => void sortBySimilarity("geometry")}
+          >
+            {sorting === "geometry" ? "Sorting…" : "Shape"}
+          </button>
+        </nav>
         <span className="spacer" />
         <button disabled={p.frames === 0} onClick={() => setPlaying(true)}>
           ▶ Preview
@@ -226,6 +263,7 @@ export function Studio() {
         </button>
       </header>
       {error && <div className="message error">Saving failed: {error}</div>}
+      {sortError && <div className="message error">Sorting failed: {sortError}</div>}
       <p className="hint">
         Drag photos to reorder, ✕ removes one from the video, click a photo to correct its
         ellipse.
