@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import io
 import os
+from collections.abc import Callable
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -47,33 +48,34 @@ def _jpeg(im: Image.Image, quality: int = 90) -> bytes:
     return buf.getvalue()
 
 
-def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
-    dataset = Dataset(data_dir)
-    preds = load_labels(predictions) if predictions else {}
-    cache_dir = data_dir / ".thumbs"
-    sizes: dict[str, tuple[int, int]] = {}
+class ImageStore:
+    """Image paths, EXIF-corrected sizes and cached downscaled JPEGs of a dataset."""
 
-    app = FastAPI(title="circlapse annotator")
+    def __init__(self, dataset: Dataset) -> None:
+        self.dataset = dataset
+        self.cache_dir = dataset.dir / ".thumbs"
+        self.sizes: dict[str, tuple[int, int]] = {}
 
-    def path_of(name: str) -> Path:
+    def path_of(self, name: str) -> Path:
         try:
-            return dataset.image_path(name)
+            return self.dataset.image_path(name)
         except FileNotFoundError:
             raise HTTPException(404, f"unknown image {name}") from None
 
-    def size_of(name: str) -> tuple[int, int]:
-        if name not in sizes:
-            with Image.open(path_of(name)) as im:
+    def size_of(self, name: str) -> tuple[int, int]:
+        """(width, height) of the EXIF-corrected image."""
+        if name not in self.sizes:
+            with Image.open(self.path_of(name)) as im:
                 w, h = im.size
                 # EXIF orientations 5-8 swap width and height
                 if im.getexif().get(0x0112, 1) in (5, 6, 7, 8):
                     w, h = h, w
-            sizes[name] = (w, h)
-        return sizes[name]
+            self.sizes[name] = (w, h)
+        return self.sizes[name]
 
-    def cached(name: str, kind: str, max_side: int, quality: int) -> Path:
-        src = path_of(name)
-        dst = cache_dir / kind / f"{name}.jpg"
+    def cached(self, name: str, kind: str, max_side: int, quality: int) -> Path:
+        src = self.path_of(name)
+        dst = self.cache_dir / kind / f"{name}.jpg"
         if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime:
             im = open_image(src)
             im.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
@@ -81,10 +83,26 @@ def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
             dst.write_bytes(_jpeg(im, quality))
         return dst
 
-    @app.get("/api/images")
+    def display(self, name: str) -> Path:
+        return self.cached(name, "display", DISPLAY_SIZE, 92)
+
+
+def annotation_router(
+    store: ImageStore,
+    preds: dict[str, ImageLabel] | None = None,
+    names: Callable[[], list[str]] | None = None,
+) -> APIRouter:
+    """Image, label and fit routes; ``names`` sets which images are listed and in what order."""
+    dataset = store.dataset
+    preds = preds or {}
+    names = names or dataset.images
+    path_of, size_of = store.path_of, store.size_of
+    router = APIRouter()
+
+    @router.get("/api/images")
     def list_images() -> list[ImageInfo]:
         out = []
-        for name in dataset.images():
+        for name in names():
             label = dataset.label(name)
             w, h = size_of(name)
             pred = preds.get(name)
@@ -101,20 +119,20 @@ def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
             )
         return out
 
-    @app.get("/api/thumb/{name}")
+    @router.get("/api/thumb/{name}")
     def thumb(name: str) -> FileResponse:
-        return FileResponse(cached(name, "thumb", THUMB_SIZE, 80), media_type="image/jpeg")
+        return FileResponse(store.cached(name, "thumb", THUMB_SIZE, 80), media_type="image/jpeg")
 
-    @app.get("/api/image/{name}")
+    @router.get("/api/image/{name}")
     def image(name: str) -> FileResponse:
-        return FileResponse(cached(name, "display", DISPLAY_SIZE, 92), media_type="image/jpeg")
+        return FileResponse(store.display(name), media_type="image/jpeg")
 
-    @app.get("/api/labels/{name}")
+    @router.get("/api/labels/{name}")
     def get_label(name: str) -> ImageLabel:
         path_of(name)
         return dataset.label(name)
 
-    @app.put("/api/labels/{name}")
+    @router.put("/api/labels/{name}")
     def put_label(name: str, label: ImageLabel) -> ImageLabel:
         path_of(name)
         if label.prominent is not None and not 0 <= label.prominent < len(label.ellipses):
@@ -122,18 +140,23 @@ def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
         dataset.set_label(name, label)
         return label
 
-    @app.get("/api/predictions/{name}")
+    @router.get("/api/predictions/{name}")
     def get_prediction(name: str) -> ImageLabel | None:
         path_of(name)
         return preds.get(name)
 
-    @app.post("/api/fit")
+    @router.post("/api/fit")
     def fit(req: FitRequest) -> Ellipse:
         try:
             return Ellipse.from_points(req.points)
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
 
+    return router
+
+
+def mount_frontend(app: FastAPI) -> None:
+    """Serve the built UI at ``/``; add it after all API routes."""
     if (FRONTEND_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
     else:
@@ -145,6 +168,12 @@ def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
                 media_type="text/plain",
             )
 
+
+def create_app(data_dir: Path, predictions: Path | None = None) -> FastAPI:
+    app = FastAPI(title="circlapse annotator")
+    preds = load_labels(predictions) if predictions else {}
+    app.include_router(annotation_router(ImageStore(Dataset(data_dir)), preds))
+    mount_frontend(app)
     return app
 
 

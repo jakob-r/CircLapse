@@ -1,4 +1,4 @@
-"""Command line interface: ``circlapse synth | annotate | train | runs | detect | eval``, more."""
+"""Command line interface: ``circlapse make | studio | synth | annotate | train | detect``, more."""
 
 from __future__ import annotations
 
@@ -33,6 +33,91 @@ def synth(
     )
     generate_dataset(out, n, cfg, seed)
     typer.echo(f"wrote {n} images to {out}")
+
+
+@app.command()
+def make(
+    data: Annotated[Path, typer.Argument(help="Folder with the photos")],
+    project: Annotated[
+        Path | None, typer.Option(help="Project folder [default: DATA/circlapse]")
+    ] = None,
+    from_apple_photos: Annotated[
+        bool, typer.Option(help="First export --from-date..--to-date from Apple Photos into DATA")
+    ] = False,
+    from_date: Annotated[
+        datetime | None, typer.Option(formats=["%Y-%m-%d"], help="First day (inclusive)")
+    ] = None,
+    to_date: Annotated[
+        datetime | None, typer.Option(formats=["%Y-%m-%d"], help="Last day (inclusive)")
+    ] = None,
+    checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
+    min_confidence: Annotated[
+        float, typer.Option(help="Photos below this detector confidence are not copied")
+    ] = 0.5,
+    host: Annotated[str, typer.Option()] = "127.0.0.1",
+    port: Annotated[int, typer.Option()] = 8000,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
+) -> None:
+    """Make a circlapse: detect circles, copy the candidates into a project and open the studio.
+
+    The studio lets you remove photos, correct ellipses, reorder and export the video.
+    Run it again on the same folder to reopen the project.
+    --from-apple-photos needs the photos extra and Full Disk Access for the terminal.
+    """
+    from circlapse.studio.project import create_project, is_project
+
+    project = project or data / "circlapse"
+    if is_project(project):
+        typer.echo(f"reopening {project}")
+    else:
+        fallback = None
+        if from_apple_photos:
+            if from_date is None or to_date is None:
+                raise typer.BadParameter("--from-apple-photos needs --from-date and --to-date")
+            try:
+                from circlapse.apple_photos import export_range
+            except ImportError as e:
+                raise typer.BadParameter("install the photos extra: uv sync --extra photos") from e
+            fallback = export_range(data, from_date.date(), to_date.date(), log=_log)
+            typer.echo(f"exported {len(fallback)} photos from Apple Photos to {data}")
+        if not data.is_dir():
+            raise typer.BadParameter(f"{data} is not a directory")
+        from circlapse.detect.nn import NNDetector
+
+        detector = NNDetector(checkpoint, min_confidence=min_confidence)
+        created = create_project(data, project, detector, fallback, log=_log)
+        typer.echo(f"copied {len(created.order)} photos with a circle to {project}")
+    _serve_studio(project, host, port, open_browser)
+
+
+@app.command()
+def studio(
+    project: Annotated[Path, typer.Argument(help="Project folder made by `circlapse make`")],
+    host: Annotated[str, typer.Option()] = "127.0.0.1",
+    port: Annotated[int, typer.Option()] = 8000,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
+) -> None:
+    """Open the studio of an existing project."""
+    from circlapse.studio.project import is_project
+
+    if not is_project(project):
+        raise typer.BadParameter(f"{project} is not a project, create one with `circlapse make`")
+    _serve_studio(project, host, port, open_browser)
+
+
+def _serve_studio(project: Path, host: str, port: int, open_browser: bool) -> None:
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from circlapse.studio.app import create_studio_app
+
+    url = f"http://{host}:{port}"
+    typer.echo(f"studio on {url} (ctrl+c to stop)")
+    if open_browser:
+        threading.Timer(1.0, webbrowser.open, [url]).start()
+    uvicorn.run(create_studio_app(project), host=host, port=port, log_level="warning")
 
 
 @app.command()

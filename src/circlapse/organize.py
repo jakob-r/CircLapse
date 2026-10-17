@@ -194,6 +194,11 @@ def cluster_name(cluster: list[Photo], geocoder: Geocoder | None) -> str:
     return name
 
 
+def dated_name(photo: Photo) -> str:
+    """``YYYYMMDD-HHMMSS_<original>`` so that name order is capture order; undated keep theirs."""
+    return f"{photo.time:%Y%m%d-%H%M%S}_{photo.name}" if photo.time else photo.name
+
+
 def _unique(name: str, taken: set[str]) -> str:
     candidate, i = name, 2
     while candidate in taken:
@@ -225,7 +230,7 @@ def plan_moves(
         folder = _unique(name, taken)
         labels = folders.setdefault(folder, {})
         for p in photos:
-            new = f"{p.time:%Y%m%d-%H%M%S}_{p.name}" if p.time else p.name
+            new = dated_name(p)
             moves.append(Move(p.name, f"{folder}/{new}"))
             labels[new] = p.label
     return moves, folders

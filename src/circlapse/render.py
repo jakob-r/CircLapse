@@ -192,18 +192,23 @@ def plan_frames(
     labels: dict[str, ImageLabel],
     shapes: dict[str, tuple[int, int]],
     cfg: RenderConfig,
+    order: list[str] | None = None,
 ) -> tuple[list[Frame], list[str], float]:
-    """Frames to render in name order, dropped photo names and the common crop extent."""
+    """Frames to render, dropped photo names and the common crop extent.
+
+    Frames follow ``order`` (names missing there are dropped), by default name order.
+    """
+    names = [n for n in order if n in shapes] if order is not None else sorted(shapes)
     candidates = [
         Frame(name, e, shapes[name])
-        for name in sorted(shapes)
+        for name in names
         if (e := labels[name].prominent_ellipse if name in labels else None) is not None
     ]
     extent = choose_extent((f.max_extent for f in candidates), cfg)
     # A tiny tolerance keeps the photo that defines the extent despite float rounding
     used = [f for f in candidates if f.max_extent >= extent * (1 - 1e-9)]
     used_names = {f.name for f in used}
-    dropped = [n for n in sorted(shapes) if n not in used_names]
+    dropped = [n for n in names if n not in used_names]
     return used, dropped, extent
 
 
@@ -226,13 +231,15 @@ def render(
     formats: Iterable[str] = FORMATS,
     frames_out: Path | None = None,
     log: Callable[[str], None] = lambda _: None,
+    order: list[str] | None = None,
 ) -> RenderResult:
     """Render the photos of ``directory`` with their prominent ellipses in ``labels``.
 
     Writes ``out.<fmt>`` for every format; ``frames_out`` keeps the graded frames as PNGs.
+    ``order`` sets the frame order (see :func:`plan_frames`).
     """
     shapes = {name: image_shape(directory / name) for name in list_images(directory)}
-    frames, dropped, extent = plan_frames(labels, shapes, cfg)
+    frames, dropped, extent = plan_frames(labels, shapes, cfg, order)
     log(
         f"{len(frames)} frames, {len(dropped)} dropped, crop extent {extent:.2f} circle radii"
         f" (circle diameter {100 / extent:.0f}% of the frame)"

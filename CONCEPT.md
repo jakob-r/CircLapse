@@ -75,3 +75,33 @@ Training images should feature
 - Python
 - uv
 - and whatever packages help us
+
+## User friendly workflow
+
+For users that just want to create a circlapse video from a bunch of pictures we need a nice and friendly tool.
+
+Suggested workflow:
+
+1. The user uses the CLI tool either on a folder or on apple photos plus a date range
+2. The script then creates a folder with all candidate pictures and with all ellipses annotated
+3. Then automatically the browser opens and shows a UI
+4. The UI allows to remove pictures and optionally correct ellipses
+5. Photos are sorted by date but the user can rearrange them
+6. The use can export the video in their desired format
+
+Usage:
+
+```
+circlapse make ~/Pictures/circles                     # a folder
+circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 2025-07-31
+```
+
+`make` detects the prominent ellipse in every photo directly in the folder and copies the photos
+with a circle into `<folder>/circlapse/` (the originals stay untouched; photos without a circle are
+not copied), named `YYYYMMDD-HHMMSS_<name>` and sorted by capture date.
+`project.json` there keeps the frame order, the removed photos and the export settings.
+Then the studio opens in the browser: drag to reorder, ✕ removes a photo, clicking one opens the
+ellipse editor, "Aligned" shows the rectified crops, "Preview" plays them, and "Export video"
+renders mp4 / webm / gif into `<folder>/circlapse/export/`.
+Running `make` again on the same folder reopens the project; `circlapse studio <project>` opens
+any project folder.

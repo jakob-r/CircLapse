@@ -69,3 +69,62 @@ export function useImages() {
 export function usePrediction(name: string) {
   return useQuery({ queryKey: ["prediction", name], queryFn: () => fetchPrediction(name) });
 }
+
+// ---------------------------------------------------------------- studio
+
+export type PhotoInfo = Schemas["PhotoInfo"];
+export type Format = NonNullable<Schemas["ExportSettings"]["formats"]>[number];
+export type ExportSettings = Required<Schemas["ExportSettings"]>;
+export type ProjectInfo = Omit<Schemas["ProjectInfo"], "settings"> & { settings: ExportSettings };
+export type ExportStatus = Schemas["ExportStatus"];
+export const FORMATS: Format[] = ["mp4", "webm", "gif"];
+
+export interface ProjectUpdate {
+  order: string[];
+  excluded: string[];
+  settings: ExportSettings;
+}
+
+function toProject(p: Schemas["ProjectInfo"]): ProjectInfo {
+  return { ...p, settings: { ...p.settings, formats: p.settings.formats ?? [] } };
+}
+
+/** The studio project, or null when the server is the plain annotator. */
+export function useProject() {
+  return useQuery({
+    queryKey: ["project"],
+    queryFn: async () => {
+      const res = await fetch("/api/project");
+      if (res.status === 404) return null;
+      return toProject(await json<Schemas["ProjectInfo"]>(res));
+    },
+  });
+}
+
+export async function saveProject(update: ProjectUpdate): Promise<ProjectInfo> {
+  const res = await fetch("/api/project", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+  return toProject(await json<Schemas["ProjectInfo"]>(res));
+}
+
+export async function startExport(settings: ExportSettings): Promise<ExportStatus> {
+  const res = await fetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  return json<ExportStatus>(res);
+}
+
+export function useExportStatus() {
+  return useQuery({
+    queryKey: ["export"],
+    queryFn: async () => json<ExportStatus>(await fetch("/api/export")),
+    refetchInterval: (q) => (q.state.data?.state === "running" ? 1000 : false),
+  });
+}
+
+export const exportFileUrl = (name: string) => url("export/file", name);

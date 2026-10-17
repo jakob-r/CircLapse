@@ -107,15 +107,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/": {
+    "/api/project": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** No Frontend */
-        get: operations["no_frontend__get"];
+        /** Get Project */
+        get: operations["get_project_api_project_get"];
+        /** Put Project */
+        put: operations["put_project_api_project_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/preview/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview */
+        get: operations["preview_api_preview__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Status */
+        get: operations["export_status_api_export_get"];
+        put?: never;
+        /** Start Export */
+        post: operations["start_export_api_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/export/file/{filename}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export File */
+        get: operations["export_file_api_export_file__filename__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -143,6 +196,67 @@ export interface components {
              * @default 0
              */
             angle_deg: number;
+        };
+        /** ExportSettings */
+        ExportSettings: {
+            /** Formats */
+            formats?: ("mp4" | "webm" | "gif")[];
+            /**
+             * Size
+             * @default 1080
+             */
+            size: number;
+            /**
+             * Fps
+             * @default 10
+             */
+            fps: number;
+            /**
+             * Keep
+             * @default 1
+             */
+            keep: number;
+            /**
+             * Max Extent
+             * @default 3
+             */
+            max_extent: number;
+            /**
+             * Grade
+             * @default true
+             */
+            grade: boolean;
+        };
+        /** ExportStatus */
+        ExportStatus: {
+            /**
+             * State
+             * @default idle
+             * @enum {string}
+             */
+            state: "idle" | "running" | "done" | "error";
+            /**
+             * Log
+             * @default []
+             */
+            log: string[];
+            /**
+             * Outputs
+             * @default []
+             */
+            outputs: string[];
+            /**
+             * Dropped
+             * @default []
+             */
+            dropped: string[];
+            /** Error */
+            error?: string | null;
+            /**
+             * Directory
+             * @default
+             */
+            directory: string;
         };
         /** FitRequest */
         FitRequest: {
@@ -195,6 +309,45 @@ export interface components {
             source: "human" | "synth" | "detector";
             /** Runtime S */
             runtime_s?: number | null;
+        };
+        /** PhotoInfo */
+        PhotoInfo: {
+            /** Name */
+            name: string;
+            /** Time */
+            time: string | null;
+            /** Usable */
+            usable: boolean;
+            /** Dropped */
+            dropped: boolean;
+            /** Preview */
+            preview: string | null;
+        };
+        /** ProjectInfo */
+        ProjectInfo: {
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Order */
+            order: string[];
+            /** Excluded */
+            excluded: string[];
+            settings: components["schemas"]["ExportSettings"];
+            /** Extent */
+            extent: number | null;
+            /** Frames */
+            frames: number;
+            /** Photos */
+            photos: components["schemas"]["PhotoInfo"][];
+        };
+        /** ProjectUpdate */
+        ProjectUpdate: {
+            /** Order */
+            order: string[];
+            /** Excluded */
+            excluded: string[];
+            settings: components["schemas"]["ExportSettings"];
         };
         /** ScoredEllipse */
         ScoredEllipse: {
@@ -448,7 +601,7 @@ export interface operations {
             };
         };
     };
-    no_frontend__get: {
+    get_project_api_project_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -463,7 +616,157 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+        };
+    };
+    put_project_api_project_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_preview__name__get: {
+        parameters: {
+            query?: {
+                size?: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_status_api_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatus"];
+                };
+            };
+        };
+    };
+    start_export_api_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_file_api_export_file__filename__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                filename: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -30,6 +30,24 @@
         "8001"
       ],
       "port": 8001
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "--extra",
+        "ml",
+        "circlapse",
+        "make",
+        "data/real",
+        "--project",
+        "data/studio",
+        "--no-open",
+        "--port",
+        "8002"
+      ],
+      "port": 8002
     }
   ]
 }

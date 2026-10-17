@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "circlapse annotator",
+    "title": "circlapse studio",
     "version": "0.1.0"
   },
   "paths": {
@@ -272,16 +272,192 @@
         }
       }
     },
-    "/": {
+    "/api/project": {
       "get": {
-        "summary": "No Frontend",
-        "operationId": "no_frontend__get",
+        "summary": "Get Project",
+        "operationId": "get_project_api_project_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Put Project",
+        "operationId": "put_project_api_project_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/preview/{name}": {
+      "get": {
+        "summary": "Preview",
+        "operationId": "preview_api_preview__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 320,
+              "title": "Size"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export": {
+      "get": {
+        "summary": "Export Status",
+        "operationId": "export_status_api_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Start Export",
+        "operationId": "start_export_api_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export/file/{filename}": {
+      "get": {
+        "summary": "Export File",
+        "operationId": "export_file_api_export_file__filename__get",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -323,6 +499,114 @@
           "b"
         ],
         "title": "Ellipse"
+      },
+      "ExportSettings": {
+        "properties": {
+          "formats": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "mp4",
+                "webm",
+                "gif"
+              ]
+            },
+            "type": "array",
+            "title": "Formats"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 64.0,
+            "title": "Size",
+            "default": 1080
+          },
+          "fps": {
+            "type": "number",
+            "maximum": 60.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Fps",
+            "default": 10.0
+          },
+          "keep": {
+            "type": "number",
+            "maximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Keep",
+            "default": 1.0
+          },
+          "max_extent": {
+            "type": "number",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Extent",
+            "default": 3.0
+          },
+          "grade": {
+            "type": "boolean",
+            "title": "Grade",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ExportSettings"
+      },
+      "ExportStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "running",
+              "done",
+              "error"
+            ],
+            "title": "State",
+            "default": "idle"
+          },
+          "log": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Log",
+            "default": []
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Outputs",
+            "default": []
+          },
+          "dropped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dropped",
+            "default": []
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "directory": {
+            "type": "string",
+            "title": "Directory",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "ExportStatus"
       },
       "FitRequest": {
         "properties": {
@@ -479,6 +763,145 @@
         },
         "type": "object",
         "title": "ImageLabel"
+      },
+      "PhotoInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "usable": {
+            "type": "boolean",
+            "title": "Usable"
+          },
+          "dropped": {
+            "type": "boolean",
+            "title": "Dropped"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "time",
+          "usable",
+          "dropped",
+          "preview"
+        ],
+        "title": "PhotoInfo"
+      },
+      "ProjectInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Order"
+          },
+          "excluded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ExportSettings"
+          },
+          "extent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extent"
+          },
+          "frames": {
+            "type": "integer",
+            "title": "Frames"
+          },
+          "photos": {
+            "items": {
+              "$ref": "#/components/schemas/PhotoInfo"
+            },
+            "type": "array",
+            "title": "Photos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "order",
+          "excluded",
+          "settings",
+          "extent",
+          "frames",
+          "photos"
+        ],
+        "title": "ProjectInfo"
+      },
+      "ProjectUpdate": {
+        "properties": {
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Order"
+          },
+          "excluded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ExportSettings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order",
+          "excluded",
+          "settings"
+        ],
+        "title": "ProjectUpdate"
       },
       "ScoredEllipse": {
         "properties": {

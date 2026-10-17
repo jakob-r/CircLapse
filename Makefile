@@ -9,7 +9,7 @@ RUN := $(shell date +%Y-%m-%d_%H%M)_$(shell git rev-parse --short HEAD)
 endif
 FRONTEND_SRC := $(shell find frontend/src -type f) frontend/index.html frontend/package.json frontend/vite.config.ts
 
-.PHONY: help install install-ml dev build annotate synth synth-train pretrain finetune train experiment record use detect eval render api-types test lint clean
+.PHONY: help install install-ml dev build studio annotate synth synth-train pretrain finetune train experiment record use detect eval render api-types test lint clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -37,6 +37,9 @@ frontend/dist/index.html: frontend/node_modules $(FRONTEND_SRC)
 	cd frontend && npm run build
 
 build: frontend/dist/index.html ## Build the annotator UI
+
+studio: build ## Make a circlapse of DATA: detect, review in the browser and export (DATA/circlapse/)
+	uv run --extra ml circlapse make $(DATA)
 
 annotate: build ## Annotate images in DATA on http://127.0.0.1:8000 (PRED=predictions.json to overlay)
 	uv run circlapse annotate $(DATA) $(if $(PRED),--pred $(PRED))
@@ -81,8 +84,10 @@ eval: ## Evaluate data/predictions/NAME.json against DATA labels
 
 api-types: ## Regenerate frontend/src/api-types.ts from the FastAPI schema
 	uv run python -c "import json, tempfile, pathlib; \
-		from circlapse.annotate.app import create_app; \
-		print(json.dumps(create_app(pathlib.Path(tempfile.mkdtemp())).openapi(), indent=2))" \
+		from circlapse.studio.app import create_studio_app; \
+		from circlapse.studio.project import Project, save_project; \
+		d = pathlib.Path(tempfile.mkdtemp()); save_project(d, Project()); \
+		print(json.dumps(create_studio_app(d).openapi(), indent=2))" \
 		> frontend/openapi.json
 	cd frontend && npm run api-types
 

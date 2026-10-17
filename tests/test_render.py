@@ -96,3 +96,14 @@ def test_render_writes_videos(tmp_path):
     assert [p.name for p in result.outputs] == ["video.mp4", "video.webm", "video.gif"]
     assert all(p.stat().st_size > 0 for p in result.outputs)
     assert len(list((tmp_path / "frames").glob("*.png"))) == 3
+
+
+def test_plan_frames_follows_order():
+    def label(cx):
+        return ImageLabel(ellipses=[ScoredEllipse(cx=cx, cy=200, a=100, b=100)], prominent=0)
+
+    labels = {"a.jpg": label(300), "b.jpg": label(300), "c.jpg": label(300)}
+    shapes = {n: (400, 600) for n in labels}
+    frames, dropped, _ = plan_frames(labels, shapes, RenderConfig(), order=["c.jpg", "a.jpg"])
+    assert [f.name for f in frames] == ["c.jpg", "a.jpg"]
+    assert dropped == []
