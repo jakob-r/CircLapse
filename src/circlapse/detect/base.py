@@ -8,10 +8,22 @@ from typing import Protocol
 
 import numpy as np
 
+from circlapse.ellipse import Ellipse
 from circlapse.labels import Dataset, ImageLabel, ScoredEllipse, load_image, save_labels
+from circlapse.metrics import tolerance_score
 
 # Strength of Ellipse.rounded for predictions; chosen on held-out CV predictions, see RESULTS.md
 DEFAULT_ROUNDNESS = 0.75
+# The mask ellipse is kept if it is within this many metric tolerances of the params ellipse
+COMBINE_TOL = 1.0
+
+
+def combine_heads(mask: Ellipse | None, params: Ellipse) -> Ellipse:
+    """The params head finds the right ring more often, the mask head fits it more tightly:
+    keep the mask ellipse when it is "good" against the params ellipse, else use params."""
+    if mask is None or tolerance_score(params, mask) > COMBINE_TOL:
+        return params
+    return mask
 
 
 class Detector(Protocol):

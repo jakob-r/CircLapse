@@ -10,11 +10,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from circlapse.detect.base import combine_heads
 from circlapse.ellipse import Ellipse
 from circlapse.nn.data import decode, letterbox, to_tensor, transform_ellipse
 from circlapse.nn.model import EllipseNet
 
-Head = Literal["mask", "params"]
+Head = Literal["mask", "params", "combined"]
 
 
 @dataclass
@@ -29,6 +30,8 @@ class Prediction:
         return self.fit_iou * self.agreement
 
     def ellipse(self, head: Head) -> Ellipse | None:
+        if head == "combined":
+            return combine_heads(self.mask_ellipse, self.param_ellipse)
         return self.mask_ellipse if head == "mask" else self.param_ellipse
 
 
@@ -92,7 +95,7 @@ class Predictor:
         x = to_tensor(canvas)[None].to(self.device)
         return run_batch(self.model, x, self.tta)[0], np.linalg.inv(h)
 
-    def detect(self, image: np.ndarray, head: Head = "mask") -> tuple[Ellipse | None, float]:
+    def detect(self, image: np.ndarray, head: Head = "combined") -> tuple[Ellipse | None, float]:
         pred, inv = self.predict(image)
         e = pred.ellipse(head)
         if e is None:

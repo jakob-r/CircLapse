@@ -92,3 +92,16 @@ def test_tolerance_score():
     assert tolerance_score(e, Ellipse(cx=1, cy=0, a=22, b=22)) <= 1
     assert tolerance_score(e, Ellipse(cx=5, cy=0, a=20, b=20)) > 1
     assert tolerance_score(e, Ellipse(cx=0, cy=0, a=40, b=40)) > 1
+
+
+def test_combine_heads_keeps_mask_only_when_params_agree():
+    from circlapse.detect.base import combine_heads
+
+    params = Ellipse(cx=100, cy=100, a=50, b=48, angle_deg=0)
+    tight = Ellipse(cx=102, cy=100, a=46, b=45, angle_deg=5)  # same ring, slightly smaller
+    other_ring = Ellipse(cx=100, cy=100, a=20, b=19, angle_deg=0)  # inner sister ring
+    elsewhere = Ellipse(cx=200, cy=100, a=50, b=48, angle_deg=0)
+    assert combine_heads(tight, params) == tight
+    assert combine_heads(other_ring, params) == params
+    assert combine_heads(elsewhere, params) == params
+    assert combine_heads(None, params) == params

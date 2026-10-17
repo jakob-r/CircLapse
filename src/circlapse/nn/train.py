@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import get_args
 
 import numpy as np
 import torch
@@ -185,7 +186,7 @@ def predict_images(
     """Predictions of both heads for full-size images, in image coordinates."""
     dev = device()
     model.to(dev).eval()
-    out: dict[Head, dict[str, ImageLabel]] = {"mask": {}, "params": {}}
+    out: dict[Head, dict[str, ImageLabel]] = {head: {} for head in get_args(Head)}
     size = model.cfg.size
     for i in range(0, len(images), batch_size):
         chunk = images[i : i + batch_size]
@@ -196,8 +197,7 @@ def predict_images(
             invs.append(np.linalg.inv(h))
         preds = run_batch(model, torch.stack(canvases).to(dev), tta)
         for name, pred, inv in zip(names[i : i + batch_size], preds, invs, strict=True):
-            heads: tuple[Head, ...] = ("mask", "params")
-            for head in heads:
+            for head in out:
                 e = pred.ellipse(head)
                 if e is None:
                     out[head][name] = ImageLabel(status="no_ellipse", source="detector")
@@ -313,7 +313,7 @@ def finetune(
 
     if folds > 1:
         order = np.random.default_rng(0).permutation(len(items))
-        cv: dict[Head, dict[str, ImageLabel]] = {"mask": {}, "params": {}}
+        cv: dict[Head, dict[str, ImageLabel]] = {head: {} for head in get_args(Head)}
         for k in range(folds):
             held = sorted(order[k::folds].tolist())
             train_items = [it for i, it in enumerate(items) if i not in held]

@@ -24,6 +24,15 @@ def test_record_scores_run_and_updates_results(tmp_path, monkeypatch):
     assert scores["photos"] == 1  # only photos the run predicted
     assert scores["mask"]["hit"] == 0.0 and scores["mask_rounded"]["hit"] == 1.0
     assert "abc+dirty" in row
+    assert "combined" not in scores  # needs both heads
+
+    off = Ellipse(cx=160, cy=100, a=50, b=50, angle_deg=0)  # wrong place: combined uses params
+    save_labels(run / "cv_mask.json", {"a.jpg": _label(off)})
+    save_labels(run / "cv_params.json", {"a.jpg": _label(squashed)})
+    record(run, tmp_path / "gt.json")
+    scores = json.loads((run / "meta.json").read_text())["scores"]
+    assert scores["mask"]["good"] == 0.0
+    assert scores["combined"]["hit"] == 0.0 and scores["combined_rounded"]["hit"] == 1.0
 
     record(run, tmp_path / "gt.json")  # re-recording replaces the row
     assert RESULTS.read_text().count("| r1 |") == 1

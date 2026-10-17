@@ -126,7 +126,10 @@ def detect(
     data: Annotated[Path, typer.Argument(help="Image directory")] = Path("data/real"),
     out: Annotated[Path, typer.Option(help="Predictions json")] = Path("data/predictions/nn.json"),
     checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
-    head: Annotated[str, typer.Option(help="mask (fit to predicted mask) or params")] = "mask",
+    head: Annotated[
+        str,
+        typer.Option(help="combined (mask if params agree, else params), mask or params"),
+    ] = "combined",
     min_confidence: Annotated[float, typer.Option(help="Drop images below this")] = 0.0,
     tta: Annotated[bool, typer.Option(help="Horizontal flip test-time augmentation")] = True,
     roundness: Annotated[
@@ -141,8 +144,8 @@ def detect(
     from circlapse.labels import Dataset
 
     roundness = DEFAULT_ROUNDNESS if roundness is None else roundness
-    if head not in ("mask", "params"):
-        raise typer.BadParameter("head must be mask or params")
+    if head not in ("combined", "mask", "params"):
+        raise typer.BadParameter("head must be combined, mask or params")
     detector = NNDetector(checkpoint, head, min_confidence, tta, roundness)  # type: ignore[arg-type]
     preds = run_detector(detector, Dataset(data), out)
     runtimes = sorted(p.runtime_s or 0 for p in preds.values())

@@ -15,18 +15,20 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from circlapse.detect.base import DEFAULT_ROUNDNESS
-from circlapse.labels import ImageLabel, load_labels
+from circlapse.detect.base import DEFAULT_ROUNDNESS, combine_heads
+from circlapse.labels import ImageLabel, ScoredEllipse, load_labels
 from circlapse.metrics import Summary, evaluate
 
 RUNS = Path("runs")
 RESULTS = Path("RESULTS.md")
 META = "meta.json"
+HEADS = ("mask", "params", "combined")
 
 HEADER = (
     "| run | date | commit | photos | mask good / hit / strict"
-    " | mask rounded good / hit / strict | params good / hit / strict | note |\n"
-    "|---|---|---|---|---|---|---|---|\n"
+    " | mask rounded good / hit / strict | params good / hit / strict"
+    " | combined rounded good / hit / strict | note |\n"
+    "|---|---|---|---|---|---|---|---|---|\n"
 )
 
 
@@ -72,6 +74,22 @@ def _rounded(preds: dict[str, ImageLabel], strength: float) -> dict[str, ImageLa
     return out
 
 
+def _combined(mask: dict[str, ImageLabel], params: dict[str, ImageLabel]) -> dict[str, ImageLabel]:
+    """Combined-head predictions from the two heads' predictions (for runs before it existed)."""
+    out = {}
+    for name, label in params.items():
+        p = label.prominent_ellipse
+        m = mask[name].prominent_ellipse if name in mask else None
+        if p is None:
+            out[name] = label
+            continue
+        e = combine_heads(m, p)
+        out[name] = label.model_copy(
+            update={"ellipses": [ScoredEllipse(**{**e.model_dump(), "score": p.score})]}
+        )
+    return out
+
+
 def _scores(s: Summary) -> dict[str, float]:
     return {"good": s.good_rate, "hit": s.hit_rate, "strict": s.strict_hit_rate}
 
@@ -80,15 +98,14 @@ def score(run: Path, gt_path: Path, roundness: float = DEFAULT_ROUNDNESS) -> dic
     """CV scores of a run, on the photos its CV covered (labels may have grown since)."""
     gt_all = load_labels(gt_path)
     out: dict[str, object] = {"roundness": roundness}
-    for head in ("mask", "params"):
-        path = run / f"cv_{head}.json"
-        if not path.exists():
-            continue
-        preds = load_labels(path)
-        gt = {n: gt_all[n] for n in preds if n in gt_all}
-        out[head] = _scores(evaluate(gt, preds))
-        if head == "mask":
-            out["mask_rounded"] = _scores(evaluate(gt, _rounded(preds, roundness)))
+    preds = {h: load_labels(f) for h in HEADS if (f := run / f"cv_{h}.json").exists()}
+    if "combined" not in preds and "mask" in preds and "params" in preds:
+        preds["combined"] = _combined(preds["mask"], preds["params"])
+    for head, p in preds.items():
+        gt = {n: gt_all[n] for n in p if n in gt_all}
+        out[head] = _scores(evaluate(gt, p))
+        if head in ("mask", "combined"):
+            out[f"{head}_rounded"] = _scores(evaluate(gt, _rounded(p, roundness)))
         out["photos"] = len(gt)
     return out
 
@@ -113,7 +130,7 @@ def record(run: Path, gt_path: Path) -> str:
     row = (
         f"| {meta['run']} | {str(meta.get('date', '?'))[:10]} | {commit} | {s.get('photos', '-')}"
         f" | {_fmt(s.get('mask'))} | {_fmt(s.get('mask_rounded'))} | {_fmt(s.get('params'))}"
-        f" | {meta.get('note', '')} |\n"
+        f" | {_fmt(s.get('combined_rounded'))} | {meta.get('note', '')} |\n"
     )
     text = RESULTS.read_text() if RESULTS.exists() else ""
     if HEADER not in text:

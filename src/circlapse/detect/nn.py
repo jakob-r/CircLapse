@@ -21,7 +21,7 @@ class NNDetector:
     def __init__(
         self,
         checkpoint: Path,
-        head: Head = "mask",
+        head: Head = "combined",
         min_confidence: float = 0.0,
         tta: bool = True,
         roundness: float = DEFAULT_ROUNDNESS,
