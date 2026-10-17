@@ -30,9 +30,9 @@ def spokes(n, rotation=0.0):
 
 
 def test_geometry_features_ignore_rotation():
-    a = geometry_features(spokes(6))
-    rotated = geometry_features(spokes(6, rotation=0.4))
-    other = geometry_features(spokes(11))
+    a = geometry_features(spokes(6), 1.4)
+    rotated = geometry_features(spokes(6, rotation=0.4), 1.4)
+    other = geometry_features(spokes(11), 1.4)
     assert np.linalg.norm(a - rotated) < 0.5 * np.linalg.norm(a - other)
 
 

@@ -24,7 +24,7 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
    Your originals are never changed; photos without a circle are not copied.
 2. The studio opens in your browser:
    - drag photos to reorder them, or sort them by date (the original order), color or shape
-     (similar patterns inside the circle, regardless of rotation),
+     (both compare the aligned, cropped frames; shape ignores rotation),
    - ✕ removes a photo from the video, the "Removed" section brings it back,
    - click a photo to correct its ellipse,
    - "Aligned" shows the rectified, cropped frames, "Preview" plays them,

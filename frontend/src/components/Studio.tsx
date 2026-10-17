@@ -242,14 +242,14 @@ export function Studio() {
           </button>
           <button
             disabled={sorting !== null}
-            title="Similar colors next to each other"
+            title="Similar colors in the aligned, cropped frame next to each other"
             onClick={() => void sortBySimilarity("color")}
           >
             {sorting === "color" ? "Sorting…" : "Color"}
           </button>
           <button
             disabled={sorting !== null}
-            title="Similar patterns inside the circle next to each other"
+            title="Similar patterns in the aligned, cropped frame next to each other"
             onClick={() => void sortBySimilarity("geometry")}
           >
             {sorting === "geometry" ? "Sorting…" : "Shape"}

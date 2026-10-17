@@ -91,8 +91,8 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     export_dir = project_dir / EXPORT_DIR
     status = ExportStatus(directory=str(export_dir))
     lock = threading.Lock()
-    # Similarity descriptors by photo, valid while its ellipse is unchanged
-    descriptors: dict[str, tuple[Ellipse, dict[SortBy, np.ndarray]]] = {}
+    # Similarity descriptors by photo, valid while its ellipse and crop are unchanged
+    descriptors: dict[str, tuple[str, dict[SortBy, np.ndarray]]] = {}
 
     app = FastAPI(title="circlapse studio")
     app.include_router(annotation_router(store, names=lambda: project.order))
@@ -196,10 +196,12 @@ def create_studio_app(project_dir: Path) -> FastAPI:
             dst, media_type="image/jpeg", headers={"Cache-Control": "max-age=31536000"}
         )
 
-    def descriptor(name: str, e: Ellipse) -> dict[SortBy, np.ndarray]:
+    def descriptor(name: str, e: Ellipse, extent: float) -> dict[SortBy, np.ndarray]:
+        key = f"{e.model_dump_json()}|{extent:.4f}"
         cached = descriptors.get(name)
-        if cached is None or cached[0] != e:
-            cached = (e, features(store.display(name), e, store.size_of(name)[0]))
+        if cached is None or cached[0] != key:
+            width = store.size_of(name)[0]
+            cached = (key, features(store.display(name), e, width, extent))
             descriptors[name] = cached
         return cached[1]
 
@@ -207,7 +209,9 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     def sorted_order(by: SortBy, loop: bool = False) -> SortedOrder:
         """The project order with the photos that have a circle arranged by similarity;
         the others keep their relative order at the end. ``loop`` makes the last photo
-        similar to the first, for videos that play in a loop."""
+        similar to the first, for videos that play in a loop. Photos are compared as the
+        video shows them: aligned and cropped like the aligned previews."""
+        extent = plan(project)[2]
         ellipses = {}
         for name in project.order:
             label = dataset.label(name)
@@ -215,7 +219,12 @@ def create_studio_app(project_dir: Path) -> FastAPI:
                 ellipses[name] = label.prominent_ellipse
         names = list(ellipses)
         with ThreadPoolExecutor() as pool:
-            descs = list(pool.map(lambda n: descriptor(n, ellipses[n]), names))
+            descs = list(
+                pool.map(
+                    lambda n: descriptor(n, ellipses[n], preview_extent(n, ellipses[n], extent)),
+                    names,
+                )
+            )
         x = np.array([d[by] for d in descs]).reshape(len(names), -1)
         ordered = [names[i] for i in similarity_path(x, closed=loop)]
         rest = [n for n in project.order if n not in ellipses]
