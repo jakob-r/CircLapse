@@ -2,7 +2,7 @@
 name = "circlapse"
 version = "0.2.0"
 description = "Detect the most prominent ellipse in photos and align them into a circle hyperlapse"
-readme = "CONCEPT.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
