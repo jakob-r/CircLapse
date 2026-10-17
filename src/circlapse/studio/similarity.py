@@ -10,7 +10,8 @@ video frames), which makes the descriptors independent of viewpoint and circle s
   e.g. the number of spokes and where the rings are.
 
 The order is a short path through the descriptors: a greedy nearest-neighbour chain started at
-the most unusual photo, then improved by 2-opt. Neither is exact, both are fast for a few
+the most unusual photo, then improved by 2-opt. For looping videos the path can be closed, so
+that the last photo is also similar to the first. Neither is exact, both are fast for a few
 hundred photos.
 """
 
@@ -92,8 +93,9 @@ def features(path: Path, e: Ellipse, width: int) -> dict[SortBy, np.ndarray]:
     return {by: fn(frame) for by, fn in FEATURES.items()}
 
 
-def similarity_path(x: np.ndarray) -> list[int]:
-    """Indices of the rows of ``x`` in an order in which neighbours are close."""
+def similarity_path(x: np.ndarray, closed: bool = False) -> list[int]:
+    """Indices of the rows of ``x`` in an order in which neighbours are close; ``closed``
+    also counts the step from the last back to the first."""
     n = len(x)
     if n <= 2:
         return list(range(n))
@@ -110,13 +112,16 @@ def similarity_path(x: np.ndarray) -> list[int]:
         path.append(nxt)
         free[nxt] = False
 
-    # 2-opt on an open path: reverse path[i:j+1] when that shortens it
+    # 2-opt: reverse a stretch of the path when that shortens it. The first photo stays put;
+    # a closed path also counts the step from its last photo back to it
     p = np.array(path)
+    end = p[0] if closed else -1
     for _ in range(50):
         improved = False
         for i in range(1, n - 1):
             a, b = p[i - 1], p[i]
-            cs, ds = p[i + 1 :], np.append(p[i + 2 :], -1)
+            # Reversing p[i..k] replaces the steps a→b and c→d by a→c and b→d
+            cs, ds = p[i + 1 :], np.append(p[i + 2 :], end)
             old = d[a, b] + np.where(ds >= 0, d[cs, ds], 0)
             new = d[a, cs] + np.where(ds >= 0, d[b, ds], 0)
             gain = old - new

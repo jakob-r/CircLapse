@@ -157,6 +157,7 @@ export function Studio() {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [sorting, setSorting] = useState<SortBy | null>(null);
   const [sortError, setSortError] = useState<string | null>(null);
+  const [loop, setLoop] = useState(false);
   const name = project.data?.name;
   useEffect(() => {
     if (name) document.title = `${name} · circlapse`;
@@ -179,7 +180,7 @@ export function Studio() {
     setSorting(by);
     setSortError(null);
     try {
-      const order = await fetchSortedOrder(by);
+      const order = await fetchSortedOrder(by, loop);
       update((u) => ({ ...u, order }));
     } catch (e) {
       setSortError(String(e));
@@ -253,6 +254,25 @@ export function Studio() {
           >
             {sorting === "geometry" ? "Sorting…" : "Shape"}
           </button>
+          <label
+            className="loop-toggle"
+            title="Color and shape: make the last photo similar to the first, for looping videos"
+          >
+            <input
+              type="checkbox"
+              aria-label="Loop"
+              checked={loop}
+              onChange={(e) => setLoop(e.target.checked)}
+            />
+            <svg viewBox="0 0 24 12" width="20" height="10" aria-hidden="true">
+              <path
+                d="M6 1.5C3.5 1.5 1.5 3.5 1.5 6s2 4.5 4.5 4.5c4 0 8-9 12-9 2.5 0 4.5 2 4.5 4.5s-2 4.5-4.5 4.5c-4 0-8-9-12-9z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+            </svg>
+          </label>
         </nav>
         <span className="spacer" />
         <button disabled={p.frames === 0} onClick={() => setPlaying(true)}>

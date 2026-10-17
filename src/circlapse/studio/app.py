@@ -204,9 +204,10 @@ def create_studio_app(project_dir: Path) -> FastAPI:
         return cached[1]
 
     @app.get("/api/sorted")
-    def sorted_order(by: SortBy) -> SortedOrder:
+    def sorted_order(by: SortBy, loop: bool = False) -> SortedOrder:
         """The project order with the photos that have a circle arranged by similarity;
-        the others keep their relative order at the end."""
+        the others keep their relative order at the end. ``loop`` makes the last photo
+        similar to the first, for videos that play in a loop."""
         ellipses = {}
         for name in project.order:
             label = dataset.label(name)
@@ -216,7 +217,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
         with ThreadPoolExecutor() as pool:
             descs = list(pool.map(lambda n: descriptor(n, ellipses[n]), names))
         x = np.array([d[by] for d in descs]).reshape(len(names), -1)
-        ordered = [names[i] for i in similarity_path(x)]
+        ordered = [names[i] for i in similarity_path(x, closed=loop)]
         rest = [n for n in project.order if n not in ellipses]
         return SortedOrder(order=ordered + rest)
 

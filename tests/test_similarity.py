@@ -34,3 +34,13 @@ def test_geometry_features_ignore_rotation():
     rotated = geometry_features(spokes(6, rotation=0.4))
     other = geometry_features(spokes(11))
     assert np.linalg.norm(a - rotated) < 0.5 * np.linalg.norm(a - other)
+
+
+def test_closed_similarity_path_comes_back_to_the_start():
+    angle = np.random.default_rng(1).permutation(24) * 2 * np.pi / 24
+    x = np.stack([np.cos(angle), np.sin(angle)], axis=1)
+    path = similarity_path(x, closed=True)
+    assert sorted(path) == list(range(24))
+    # Points on a circle: every step of the loop, including last → first, is a neighbour
+    steps = np.linalg.norm(x[path] - x[np.roll(path, -1)], axis=1)
+    assert steps.max() < 0.3

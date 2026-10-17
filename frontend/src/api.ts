@@ -112,9 +112,10 @@ export async function saveProject(update: ProjectUpdate): Promise<ProjectInfo> {
 
 export type SortBy = "color" | "geometry";
 
-/** The project order with similar photos next to each other. */
-export async function fetchSortedOrder(by: SortBy): Promise<string[]> {
-  const res = await fetch(`/api/sorted?by=${by}`);
+/** The project order with similar photos next to each other; `loop` also makes the last
+ * photo similar to the first. */
+export async function fetchSortedOrder(by: SortBy, loop: boolean): Promise<string[]> {
+  const res = await fetch(`/api/sorted?by=${by}&loop=${loop}`);
   return (await json<Schemas["SortedOrder"]>(res)).order;
 }
 

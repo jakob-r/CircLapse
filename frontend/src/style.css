@@ -128,6 +128,16 @@ kbd {
 .filters.sort {
   align-items: center;
 }
+.loop-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.loop-toggle:has(input:checked) {
+  color: inherit;
+}
 .filters .count {
   color: var(--muted);
   margin-left: 4px;

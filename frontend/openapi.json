@@ -376,7 +376,7 @@
     "/api/sorted": {
       "get": {
         "summary": "Sorted Order",
-        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end.",
+        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end. ``loop`` makes the last photo\nsimilar to the first, for videos that play in a loop.",
         "operationId": "sorted_order_api_sorted_get",
         "parameters": [
           {
@@ -390,6 +390,16 @@
               ],
               "type": "string",
               "title": "By"
+            }
+          },
+          {
+            "name": "loop",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Loop"
             }
           }
         ],
