@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import torch.nn.functional as F
 from torch.utils.data import ConcatDataset, DataLoader, Subset
 
 from circlapse.labels import Dataset, ImageLabel, ScoredEllipse, load_image, save_labels
-from circlapse.metrics import Summary, evaluate
+from circlapse.metrics import CENTER_TOL, RECT_TOL, SCALE_TOL, Summary, evaluate
 from circlapse.nn.data import (
     Augment,
     Item,
@@ -35,17 +36,84 @@ SYNTH_AUG = Augment(scale=(0.85, 1.15), rotate=180, shift=0.08, perspective=0.03
 REAL_AUG = Augment(scale=(0.7, 1.3), rotate=180, shift=0.15, perspective=0.08)
 
 
+# Loss: any annotated ellipse is an acceptable target, as in the metric (see metrics.py). Per
+# image the loss is the minimum over its targets, so predicting a sister ring is not punished
+# like a wrong shape. Choosing a non-prominent target costs TARGET_SWITCH_COST, so the
+# annotated prominent ellipse still breaks ties and the network does not flip between rings.
+TARGET_SWITCH_COST = 0.05
+PARAM_WEIGHT = 0.1
+SCALE_PULL = 0.2  # weak pull towards the target's scale inside the SCALE_TOL dead zone
+
+
+def _shape(p: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Center, mean radius √(ab) and shape vector of encoded ellipses (..., 5).
+
+    The shape vector is ``(a²-b²)/(2ab)·(cos 2θ, sin 2θ)``: the determinant-1 shape matrix
+    of :func:`metrics._shape_matrix` is ``√(1+|v|²)·I + v₁·[[1,0],[0,-1]] + v₂·[[0,1],[1,0]]``.
+    """
+    r = p[..., 2].clamp(min=1e-3)
+    d = p[..., 3:5]
+    ab = (r**2 - (d**2).sum(-1)).clamp(min=0.01 * r**2)  # keeps b > 0
+    return p[..., :2], ab.sqrt(), 2 * r[..., None] * d / ab[..., None]
+
+
+def rectification_distance(v_pred: torch.Tensor, v_gt: torch.Tensor) -> torch.Tensor:
+    """``-log(1 - rectification_error)``: log axis ratio of gt after rectifying by pred."""
+    a_pred = (1 + (v_pred**2).sum(-1)).sqrt()
+    a_gt = (1 + (v_gt**2).sum(-1)).sqrt()
+    cosh = a_pred * a_gt - (v_pred * v_gt).sum(-1)
+    return torch.acosh(cosh.clamp(min=1 + 1e-6))
+
+
+def param_loss(pred: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Scale-tolerant error of encoded ellipses (B, 5) against targets (B, K, 5) -> (B, K).
+
+    The metric's terms, each 1 at its tolerance: center error relative to the target's
+    radius, rectification error and log scale, the latter free within SCALE_TOL but for a
+    weak pull.
+    """
+    c, r, v = _shape(pred[:, None])
+    c_gt, r_gt, v_gt = _shape(targets)
+    center = (((c - c_gt) ** 2).sum(-1) + 1e-10).sqrt() / r_gt / CENTER_TOL
+    rect = -torch.expm1(-rectification_distance(v, v_gt)) / RECT_TOL
+    log_scale = ((r / r_gt).log() ** 2 + 1e-8).sqrt()
+    tol = math.log(SCALE_TOL)
+    scale = (SCALE_PULL * log_scale + F.relu(log_scale - tol)) / tol
+    return center + rect + scale
+
+
+def mask_loss(logits: torch.Tensor, masks: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """BCE and Dice of mask logits (B, 1, H, W) against target masks (B, K, H, W), each (B, K)."""
+    bce = F.binary_cross_entropy_with_logits(logits.expand_as(masks), masks, reduction="none").mean(
+        dim=(2, 3)
+    )
+    p = torch.sigmoid(logits)
+    inter = (p * masks).sum(dim=(2, 3))
+    dice = 1 - (2 * inter + 1) / (p.sum(dim=(2, 3)) + masks.sum(dim=(2, 3)) + 1)
+    return bce, dice
+
+
 def loss_fn(
     logits: torch.Tensor, params: torch.Tensor, batch: dict[str, torch.Tensor]
 ) -> tuple[torch.Tensor, dict[str, float]]:
-    mask = batch["mask"]
-    bce = F.binary_cross_entropy_with_logits(logits, mask)
-    p = torch.sigmoid(logits)
-    inter = (p * mask).sum(dim=(1, 2, 3))
-    dice = 1 - ((2 * inter + 1) / (p.sum(dim=(1, 2, 3)) + mask.sum(dim=(1, 2, 3)) + 1)).mean()
-    reg = F.smooth_l1_loss(params, batch["params"], beta=0.01)
-    total = bce + dice + 10 * reg
-    return total, {"bce": bce.item(), "dice": dice.item(), "reg": reg.item()}
+    """Minimum over each image's targets of the joint mask and parameter loss.
+
+    Both heads are scored against the same target, so they are trained to agree (the
+    ``agreement`` confidence at inference).
+    """
+    bce, dice = mask_loss(logits, batch["masks"])
+    reg = param_loss(params, batch["params"])
+    total = bce + dice + PARAM_WEIGHT * reg
+    total = total + TARGET_SWITCH_COST * (torch.arange(total.shape[1], device=total.device) > 0)
+    total = total.masked_fill(~batch["valid"], math.inf)
+    best, k = total.min(dim=1)
+    rows = torch.arange(len(k), device=k.device)
+    return best.mean(), {
+        "bce": bce[rows, k].mean().item(),
+        "dice": dice[rows, k].mean().item(),
+        "reg": reg[rows, k].mean().item(),
+        "prominent": (k == 0).float().mean().item(),  # share of images matched to it
+    }
 
 
 def _set_epoch(ds: object, epoch: int) -> None:
@@ -80,7 +148,7 @@ def fit(
         _set_epoch(train_ds, epoch)
         loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers)
         model.train()
-        start, running = time.time(), {"loss": 0.0, "bce": 0.0, "dice": 0.0, "reg": 0.0}
+        start, running = time.time(), defaultdict[str, float](float)
         n = 0
         for batch in loader:
             batch = {k: v.to(dev, non_blocking=True) for k, v in batch.items()}

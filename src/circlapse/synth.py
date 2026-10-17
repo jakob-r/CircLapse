@@ -1,9 +1,9 @@
 """Synthetic training images with one prominent ellipse plus distractors.
 
 Every image contains a prominent ellipse (major axis >= 1/3 of the image side) rendered as a
-filled disk, an outline, or concentric rings (wall / frame / glass, as with a round window,
-where the outer edge of the frame is the prominent ellipse). Smaller distractor ellipses,
-clutter, a mild perspective warp and photometric noise are added on top.
+filled disk, an outline, or 1-4 concentric sister rings of one object (wall, frame, moldings,
+glass of a round window), which are annotated as well, like in the real labels. Smaller
+distractor ellipses, clutter, a mild perspective warp and photometric noise are added on top.
 """
 
 from __future__ import annotations
@@ -151,14 +151,86 @@ def _prominent_ellipse(rng: np.random.Generator, cfg: SynthConfig) -> Ellipse:
     )
 
 
-def _scaled_about_center(e: Ellipse, factor: float) -> Ellipse:
-    return Ellipse(cx=e.cx, cy=e.cy, a=e.a * factor, b=e.b * factor, angle_deg=e.angle_deg)
+def _sister_scales(rng: np.random.Generator) -> list[float]:
+    """Scales of 1-4 sister ellipses relative to the prominent one.
+
+    Like the annotated photos: often close rings (moldings, rims) within 0.9-1.1x, sometimes
+    far ones (wall, glass) up to 0.7x and 1.4x, and sometimes only smaller or only larger ones.
+    """
+    side = rng.choice(["both", "inner", "outer"], p=[0.5, 0.35, 0.15])
+    scales = []
+    for _ in range(rng.integers(1, 5)):
+        close = rng.random() < 0.5
+        inner = side == "inner" or (side == "both" and rng.random() < 0.6)
+        if inner:
+            scales.append(rng.uniform(0.88, 0.97) if close else rng.uniform(0.68, 0.88))
+        else:
+            scales.append(rng.uniform(1.03, 1.12) if close else rng.uniform(1.12, 1.42))
+    return scales
+
+
+def _shading(rng: np.random.Generator, size: int, color: Color) -> np.ndarray:
+    """Color field of a band in relief: lit from one side, darker on the other."""
+    angle = rng.uniform(0, 2 * np.pi)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float32) / size - 0.5
+    ramp = xx * np.cos(angle) + yy * np.sin(angle)
+    field = 1 + rng.uniform(0, 0.8) * ramp
+    return np.asarray(color, np.float32) * field[..., None]
+
+
+def _fill(img: np.ndarray, e: Ellipse, field: np.ndarray) -> None:
+    """Paint the anti-aliased filled ellipse ``e`` with the color field."""
+    m = np.zeros(img.shape[:2], np.float32)
+    _draw(m, e, (1.0, 1.0, 1.0))
+    img += m[..., None] * (field - img)
+
+
+def _draw_rings(rng: np.random.Generator, img: np.ndarray, e: Ellipse, bg: Color) -> list[Ellipse]:
+    """Concentric rings of one object (a round window: wall, frame, moldings, glass).
+
+    Sister centers drift by up to ~0.08 radii in one direction, growing with the scale
+    difference, as from depth parallax. The prominent rim gets a strong edge, the other rims
+    random contrast, so sometimes a sister edge is just as strong.
+    """
+    direction = rng.uniform(0, 2 * np.pi)
+    drift = rng.uniform(0, 0.25) * e.mean_radius
+    sisters = []
+    for f in _sister_scales(rng):
+        d = drift * (f - 1)
+        sisters.append(
+            Ellipse(
+                cx=e.cx + d * np.cos(direction),
+                cy=e.cy + d * np.sin(direction),
+                a=e.a * f,
+                b=e.b * f,
+                angle_deg=e.angle_deg,
+            )
+        )
+    rings = sorted([e, *sisters], key=lambda r: -r.a)  # paint outside in
+    color = bg
+    for r in rings:
+        strong = r is e or rng.random() < 0.25
+        color = _color(rng, near=color, min_dist=90 if strong else rng.uniform(15, 70))
+        _fill(img, r, _shading(rng, img.shape[0], color))
+    if rng.random() < 0.5:  # reflections / mullions inside the innermost ring
+        glass = rings[-1]
+        for _ in range(rng.integers(1, 4)):
+            p0, p1 = glass.sample_points(32)[rng.choice(32, 2, replace=False)]
+            cv2.line(
+                img,
+                tuple(p0.astype(int)),
+                tuple(p1.astype(int)),
+                _color(rng),
+                max(1, int(glass.b * 0.03)),
+                cv2.LINE_AA,
+            )
+    return [e, *sisters]
 
 
 def _draw_prominent(
     rng: np.random.Generator, img: np.ndarray, e: Ellipse, style: str
 ) -> list[Ellipse]:
-    """Draw the prominent ellipse; return all visible ellipses with the prominent one first."""
+    """Draw the prominent ellipse; return all its annotated ellipses, the prominent one first."""
     bg = tuple(
         float(v)
         for v in img[
@@ -175,26 +247,12 @@ def _draw_prominent(
         h = thickness / 2
         stroke = Ellipse(cx=e.cx, cy=e.cy, a=e.a - h, b=max(e.b - h, 1.0), angle_deg=e.angle_deg)
         _draw(img, stroke, color, thickness)
-        return [e]
-    # rings: low-contrast wall, contrasting frame (outer edge = label), glass inside
-    wall = _scaled_about_center(e, rng.uniform(1.1, 1.4))
-    glass = _scaled_about_center(e, rng.uniform(0.7, 0.92))
-    wall_color = tuple(float(v) for v in np.clip(np.asarray(bg) + rng.normal(0, 25, 3), 0, 255))
-    _draw(img, wall, wall_color)  # type: ignore[arg-type]
-    _draw(img, e, _color(rng, near=wall_color, min_dist=90))  # type: ignore[arg-type]
-    _draw(img, glass, _color(rng, near=color))
-    if rng.random() < 0.5:  # reflections / mullions inside the glass
-        for _ in range(rng.integers(1, 4)):
-            p0, p1 = glass.sample_points(32)[rng.choice(32, 2, replace=False)]
-            cv2.line(
-                img,
-                tuple(p0.astype(int)),
-                tuple(p1.astype(int)),
-                _color(rng),
-                max(1, int(glass.b * 0.03)),
-                cv2.LINE_AA,
-            )
-    return [e, wall, glass]
+        if thickness < 0.04 * e.b:
+            return [e]
+        # a thick stroke has a second rim, a sister an annotator might pick as well
+        t = thickness
+        return [e, Ellipse(cx=e.cx, cy=e.cy, a=e.a - t, b=e.b - t, angle_deg=e.angle_deg)]
+    return _draw_rings(rng, img, e, bg)  # type: ignore[arg-type]
 
 
 def _perspective(

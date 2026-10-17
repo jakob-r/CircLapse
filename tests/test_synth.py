@@ -50,3 +50,18 @@ def test_eccentricity_is_capped():
     for seed in range(200):
         _, label = generate(np.random.default_rng(seed), cfg)
         assert all(e.eccentricity <= 0.6 + 1e-6 for e in label.ellipses)
+
+
+def test_rings_annotate_concentric_sisters():
+    from circlapse.metrics import CENTER_TOL
+    from circlapse.nn.data import concentric
+
+    cfg = SynthConfig(size=256, max_distractors=0, style_weights=(0, 0, 1))
+    counts = set()
+    for seed in range(50):
+        _, label = generate(np.random.default_rng(seed), cfg)
+        p, *sisters = label.ellipses
+        counts.add(len(sisters))
+        assert all(p.center_error(s) <= CENTER_TOL for s in sisters)
+        assert len(concentric(p, sisters)) == len(sisters)  # kept as training targets
+    assert counts == {1, 2, 3, 4}

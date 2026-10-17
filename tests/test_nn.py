@@ -72,3 +72,57 @@ def cv2_resize(m, size):
     import cv2
 
     return cv2.resize(m, (size, size), interpolation=cv2.INTER_LINEAR)
+
+
+def _encoded(*es, size=384):
+    import torch
+
+    return torch.from_numpy(np.stack([encode(e, size) for e in es]))
+
+
+def test_loss_terms_match_metric():
+    import torch
+
+    from circlapse.metrics import rectification_error
+    from circlapse.nn.train import _shape, rectification_distance
+
+    gt = Ellipse(cx=200, cy=180, a=90, b=70, angle_deg=30)
+    pred = Ellipse(cx=210, cy=175, a=100, b=60, angle_deg=50)
+    (_, r_p, v_p), (_, r_g, v_g) = _shape(_encoded(pred)), _shape(_encoded(gt))
+    rect = -torch.expm1(-rectification_distance(v_p, v_g)).item()
+    assert rect == pytest.approx(rectification_error(gt, pred), abs=1e-4)
+    assert (r_p / r_g).item() == pytest.approx(pred.mean_radius / gt.mean_radius, rel=1e-4)
+
+
+def test_loss_accepts_sister_ring_but_prefers_prominent():
+    import torch
+
+    from circlapse.nn.data import target_mask
+    from circlapse.nn.train import TARGET_SWITCH_COST, loss_fn
+
+    prominent = Ellipse(cx=190, cy=200, a=100, b=90, angle_deg=10)
+    ring = prominent.scaled(0.7).model_copy(update={"cx": 190, "cy": 200})
+    other = Ellipse(cx=90, cy=90, a=40, b=30, angle_deg=0)
+    masks = torch.from_numpy(np.stack([target_mask(e, 384) for e in (prominent, ring, other)]))
+    batch = {"masks": masks[None], "params": _encoded(prominent, ring, other)[None]}
+
+    def loss(pred, valid=(True, True, False)):
+        logits = (torch.from_numpy(target_mask(pred, 384))[None, None] - 0.5) * 40
+        b = {**batch, "valid": torch.tensor([valid])}
+        return loss_fn(logits, _encoded(pred), b)
+
+    on_prominent, parts = loss(prominent)
+    on_ring, ring_parts = loss(ring)
+    assert parts["prominent"] == 1 and ring_parts["prominent"] == 0
+    assert on_prominent < on_ring < on_prominent + TARGET_SWITCH_COST + 0.05
+    assert loss(other)[0] > on_ring + 0.5  # invalid target: not accepted
+    assert loss(ring, (True, False, False))[0] > on_ring + 0.5
+
+
+def test_synth_targets_skip_distractors():
+    from circlapse.nn.data import concentric
+
+    prominent = Ellipse(cx=200, cy=200, a=100, b=95, angle_deg=0)
+    wall = Ellipse(cx=201, cy=200, a=130, b=124, angle_deg=0)
+    distractor = Ellipse(cx=80, cy=300, a=30, b=25, angle_deg=40)
+    assert concentric(prominent, [wall, distractor]) == [wall]

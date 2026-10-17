@@ -18,11 +18,13 @@ from torch.utils.data import Dataset as TorchDataset
 
 from circlapse.ellipse import Ellipse
 from circlapse.labels import Dataset, ImageLabel, load_image
+from circlapse.metrics import CENTER_TOL, RECT_TOL, rectification_error
 
 MEAN = np.array([0.485, 0.456, 0.406], np.float32) * 255
 STD = np.array([0.229, 0.224, 0.225], np.float32) * 255
 MASK_STRIDE = 4
 CACHE_SIDE = 1024  # real photos are downscaled to this longer side once
+MAX_TARGETS = 6  # annotated ellipses per sample the loss can choose from (prominent first)
 
 
 # ---------------------------------------------------------------------------- geometry
@@ -244,26 +246,50 @@ def labeled_names(directory: Path) -> list[str]:
 def make_sample(
     rng: np.random.Generator, img: np.ndarray, ellipses: list[Ellipse], size: int, aug: Augment
 ) -> dict[str, torch.Tensor]:
-    canvas, out = augment(rng, img, ellipses[:1], size, aug)
-    target = out[0]
+    """Image plus up to MAX_TARGETS acceptable targets, the prominent one first.
+
+    ``valid`` marks real targets: the prominent one always, the others only if they stay on
+    the canvas after augmentation. Unused slots are padded with the prominent target.
+    """
+    canvas, out = augment(rng, img, ellipses[:MAX_TARGETS], size, aug)
+    valid = [True] + [_visible(e, size) for e in out[1:]]
+    out += [out[0]] * (MAX_TARGETS - len(out))
+    valid += [False] * (MAX_TARGETS - len(valid))
     return {
         "image": to_tensor(canvas),
-        "mask": torch.from_numpy(target_mask(target, size))[None],
-        "params": torch.from_numpy(encode(target, size)),
+        "masks": torch.from_numpy(np.stack([target_mask(e, size) for e in out])),
+        "params": torch.from_numpy(np.stack([encode(e, size) for e in out])),
+        "valid": torch.tensor(valid),
     }
 
 
+def concentric(prominent: Ellipse, others: list[Ellipse]) -> list[Ellipse]:
+    """``others`` that share center and shape with ``prominent`` within the metric's
+    tolerances, i.e. the rings of the same object rather than distractors."""
+    return [
+        e
+        for e in others
+        if prominent.center_error(e) <= CENTER_TOL and rectification_error(prominent, e) <= RECT_TOL
+    ]
+
+
 class SynthDataset(TorchDataset[dict[str, torch.Tensor]]):
-    """Synthetic images on disk (``circlapse synth``); target = labeled prominent ellipse."""
+    """Synthetic images on disk (``circlapse synth``).
+
+    Targets are the prominent ellipse and its concentric rings; distractors are not targets.
+    """
 
     def __init__(self, directory: Path, size: int, aug: Augment, seed: int = 0) -> None:
         self.dir = Path(directory)
         ds = Dataset(self.dir)
-        self.entries: list[tuple[str, Ellipse]] = []
+        self.entries: list[tuple[str, list[Ellipse]]] = []
         for name, label in sorted(ds.labels.items()):
-            e = label.prominent_ellipse
-            if e is not None:
-                self.entries.append((name, Ellipse(**e.model_dump(exclude={"score"}))))
+            if label.prominent_ellipse is None:
+                continue
+            es = [Ellipse(**e.model_dump(exclude={"score"})) for e in label.ellipses]
+            target = es[label.prominent]  # type: ignore[index]
+            rest = [e for i, e in enumerate(es) if i != label.prominent]
+            self.entries.append((name, [target, *concentric(target, rest)]))
         self.size, self.aug, self.seed = size, aug, seed
         self.epoch = 0
 
@@ -271,13 +297,13 @@ class SynthDataset(TorchDataset[dict[str, torch.Tensor]]):
         return len(self.entries)
 
     def __getitem__(self, i: int) -> dict[str, torch.Tensor]:
-        name, e = self.entries[i]
+        name, es = self.entries[i]
         rng = np.random.default_rng([self.seed, self.epoch, i])
         bgr = cv2.imread(str(self.dir / name))
         if bgr is None:
             raise FileNotFoundError(self.dir / name)
         img = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        return make_sample(rng, img, [e], self.size, self.aug)
+        return make_sample(rng, img, es, self.size, self.aug)
 
 
 class ItemDataset(TorchDataset[dict[str, torch.Tensor]]):
