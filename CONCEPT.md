@@ -61,6 +61,15 @@ Training images should feature
 - I have an old version in `./old_version` that uses opencv and edge detection but it did not work well.
 - I guess a version using neural networks would be better, but I didn't find a good architecture for ellipse detection.
 
+## Output video
+
+- 10 fps
+- square aspect ratio
+- 1080 x 1080 pixels
+- formats: mp4, gif, webm
+- we can rely on ffmpeg
+- cropped images can be slightly processed for nice color, brightness and contrast
+
 ## Tech Stack
 
 - Python

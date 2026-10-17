@@ -239,6 +239,83 @@ def organize(
     typer.echo(f"moved {len(moves)} photos in {data}")
 
 
+@app.command()
+def render(
+    data: Annotated[Path, typer.Argument(help="Directory with the photos, in name order")],
+    out: Annotated[
+        Path | None,
+        typer.Option(help="Output path without suffix [default: DATA/circlapse/<DATA name>]"),
+    ] = None,
+    labels: Annotated[
+        Path | None,
+        typer.Option(help="Ellipses per photo; photos missing there are detected and added"),
+    ] = None,
+    formats: Annotated[str, typer.Option(help="Comma separated: mp4, webm, gif")] = "mp4,webm,gif",
+    size: Annotated[int, typer.Option(help="Frame side length in pixels")] = 1080,
+    fps: Annotated[float, typer.Option()] = 10.0,
+    keep: Annotated[
+        float, typer.Option(help="Fraction of photos to keep; dropping some widens the crop")
+    ] = 1.0,
+    max_extent: Annotated[
+        float, typer.Option(help="Widest crop, as frame half side in circle radii")
+    ] = 3.0,
+    grade: Annotated[bool, typer.Option(help="Mild automatic color and exposure grade")] = True,
+    gif_size: Annotated[int | None, typer.Option(help="GIF side length [default: --size]")] = None,
+    frames: Annotated[Path | None, typer.Option(help="Also keep the frames as PNGs here")] = None,
+    checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
+    min_confidence: Annotated[
+        float, typer.Option(help="Detected ellipses below this confidence are not used")
+    ] = 0.5,
+) -> None:
+    """Align the photos of DATA on their prominent ellipse and encode the hyperlapse."""
+    from circlapse.labels import LABELS_FILE, ImageLabel, list_images, load_labels, save_labels
+    from circlapse.render import FORMATS, RenderConfig
+    from circlapse.render import render as run_render
+
+    if not data.is_dir():
+        raise typer.BadParameter(f"{data} is not a directory")
+    fmts = [f.strip() for f in formats.split(",") if f.strip()]
+    if unknown := set(fmts) - set(FORMATS):
+        raise typer.BadParameter(f"unknown formats {sorted(unknown)}, expected {FORMATS}")
+    labels_path = labels or data / LABELS_FILE
+    known = load_labels(labels_path)
+    missing = [n for n in list_images(data) if n not in known]
+    if missing:
+        from circlapse.detect.nn import NNDetector
+        from circlapse.labels import load_image
+
+        typer.echo(f"detecting ellipses in {len(missing)} photos -> {labels_path}")
+        detector = NNDetector(checkpoint)
+        for i, name in enumerate(missing):
+            ellipses = detector.detect(load_image(data / name))
+            known[name] = ImageLabel(
+                ellipses=ellipses,
+                prominent=0 if ellipses else None,
+                status="labeled" if ellipses else "no_ellipse",
+                source="detector",
+            )
+            if (i + 1) % 20 == 0:
+                typer.echo(f"  detected {i + 1}/{len(missing)}")
+        save_labels(labels_path, known)
+    usable = {
+        name: label
+        for name, label in known.items()
+        if label.status == "labeled"
+        and (
+            label.source != "detector"
+            or (e := label.prominent_ellipse) is None
+            or (e.score or 0.0) >= min_confidence
+        )
+    }
+    cfg = RenderConfig(
+        size=size, fps=fps, keep=keep, max_extent=max_extent, grade=grade, gif_size=gif_size
+    )
+    out = out or data / "circlapse" / data.name
+    result = run_render(data, usable, out, cfg, fmts, frames, log=_log)
+    if result.dropped:
+        typer.echo(f"dropped: {', '.join(result.dropped)}")
+
+
 @runs_app.command("start")
 def runs_start(
     run: Annotated[Path, typer.Argument(help="New run folder, e.g. runs/<date>_<commit>")],

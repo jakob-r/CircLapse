@@ -9,7 +9,7 @@ RUN := $(shell date +%Y-%m-%d_%H%M)_$(shell git rev-parse --short HEAD)
 endif
 FRONTEND_SRC := $(shell find frontend/src -type f) frontend/index.html frontend/package.json frontend/vite.config.ts
 
-.PHONY: help install install-ml dev build annotate synth synth-train pretrain finetune train experiment record use detect eval api-types test lint clean
+.PHONY: help install install-ml dev build annotate synth synth-train pretrain finetune train experiment record use detect eval render api-types test lint clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -72,6 +72,9 @@ use: ## Make runs/RUN the current model (copies its checkpoints to checkpoints/)
 
 detect: ## Predict DATA with CKPT -> data/predictions/NAME.json
 	uv run --extra ml circlapse detect $(DATA) --checkpoint $(CKPT) --out data/predictions/$(NAME).json
+
+render: ## Render the hyperlapse of DATA (mp4, webm, gif) into DATA/circlapse/
+	uv run --extra ml circlapse render $(DATA)
 
 eval: ## Evaluate data/predictions/NAME.json against DATA labels
 	uv run circlapse eval --gt $(DATA) --pred data/predictions/$(NAME).json
