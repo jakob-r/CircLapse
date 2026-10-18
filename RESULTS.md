@@ -19,3 +19,4 @@ photos are not directly comparable.
 | 2026-10-16_0028_87be379 | 2026-10-16 | 87be379+dirty | 37 | 75.7 / 70.3 / 62.2 | 89.2 / 70.3 / 62.2 | 78.4 / 51.4 / 40.5 | 78.4 / 62.2 / 48.6 | photometric aug, ecc cap 0.6, 37 photos (checkpoint overwritten) |
 | 2026-10-16_1200_c506334 | 2026-10-16 | c506334 | 37 | 70.3 / 62.2 / 54.1 | 81.1 / 62.2 / 56.8 | 70.3 / 40.5 / 32.4 | 70.3 / 54.1 / 43.2 | round synth shapes, perspective 0.01 |
 | 2026-10-16_2221_18e2707 | 2026-10-16 | db26c60 | 108 | 80.6 / 68.5 / 62.0 | 85.2 / 68.5 / 62.0 | 88.9 / 55.6 / 47.2 | 88.9 / 68.5 / 59.3 | multi-target scale-tolerant loss, synth sister rings (1-4, close, drift, shaded), outline inner rim |
+| 2026-10-17_2209_2bc6a14 | 2026-10-17 | 2bc6a14+dirty | 165 | 79.4 / 65.5 / 62.4 | 86.7 / 66.7 / 63.6 | 86.7 / 41.8 / 37.0 | 85.5 / 60.0 / 56.4 | fine-tune on 165 photos (+57 Technikmuseum Rügen) |

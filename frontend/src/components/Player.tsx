@@ -103,7 +103,7 @@ export function Player({
                   onSkip(current.name);
                 }}
               >
-                Remove frame
+                Skip frame
               </button>
             </>
           )}

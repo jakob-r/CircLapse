@@ -24,11 +24,11 @@ describe("labelOps", () => {
     });
   });
 
-  it("toggles no_ellipse on and off", () => {
+  it("no_ellipse removes the ellipses and toggles off", () => {
     const l = addEllipse(empty, e);
     const n = toggleStatus(l, "no_ellipse");
-    expect(n).toMatchObject({ status: "no_ellipse", prominent: null });
-    expect(toggleStatus(n, "no_ellipse")).toMatchObject({ status: "labeled", prominent: 0 });
+    expect(n).toMatchObject({ status: "no_ellipse", prominent: null, ellipses: [] });
+    expect(toggleStatus(n, "no_ellipse")).toMatchObject({ status: "unlabeled", prominent: null });
     expect(toggleStatus(toggleStatus(empty, "skip"), "skip").status).toBe("unlabeled");
   });
 });

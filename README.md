@@ -4,8 +4,8 @@ Turn a pile of photos of round things — manhole covers, rose windows, clocks, 
 hyperlapse in which the circle never moves.
 
 Circlapse finds the most prominent ellipse in every photo with a neural network, warps each photo
-so that the ellipse becomes a centered circle, picks the widest crop that works for all photos and
-encodes the sequence as mp4, webm or gif (1080 × 1080, 10 fps by default).
+so that the ellipse becomes a centered circle, picks the widest crop that works for all photos (optionally zoomed in further)
+and encodes the sequence as mp4, webm or gif (1080 × 1080, 10 fps by default).
 
 ## Make a circlapse
 
@@ -22,10 +22,12 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
 1. Every photo directly in the folder is searched for a circle. The ones with a circle are copied
    into `<folder>/circlapse/`, renamed `YYYYMMDD-HHMMSS_<name>` and sorted by capture date.
    Your originals are never changed; photos without a circle are not copied.
+   Camera RAW files (ARW, CR2, CR3, NEF, RAF, DNG, ORF, RW2) are converted to JPEG on the way in,
+   keeping capture time and GPS. A RAW file is skipped when a JPEG of the same name is in the folder.
 2. The studio opens in your browser:
    - drag photos to reorder them, or sort them by date (the original order), color or shape
      (both compare the aligned, cropped frames; shape ignores rotation),
-   - ✕ removes a photo from the video, the "Removed" section brings it back,
+   - ✕ skips a photo (it leaves the video), the "Skipped" section brings it back,
    - click a photo to correct its ellipse,
    - "Aligned" shows the rectified, cropped frames, "Preview" plays them,
    - "Export video…" picks formats, size, speed and how many photos to keep — dropping the few
@@ -34,7 +36,7 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
 
 Run `circlapse make` on the same folder again to reopen the project, or `circlapse studio
 <project folder>` to open any project. Everything is stored in the project folder:
-the photos, `labels.json` with the ellipses and `project.json` with order, removed photos and
+the photos, `labels.json` with the ellipses and `project.json` with order, skipped photos and
 export settings.
 
 ## Install

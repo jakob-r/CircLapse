@@ -117,7 +117,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
         if extent is not None:
             return extent
         own = Frame(name, e, shapes()[name]).max_extent
-        return max(1.0, min(own, project.settings.max_extent))
+        return max(1.0, min(own, 3.0) / project.settings.zoom)
 
     def info() -> ProjectInfo:
         frames, dropped, extent = plan(project)

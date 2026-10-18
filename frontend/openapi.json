@@ -376,7 +376,7 @@
     "/api/sorted": {
       "get": {
         "summary": "Sorted Order",
-        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end. ``loop`` makes the last photo\nsimilar to the first, for videos that play in a loop.",
+        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end. ``loop`` makes the last photo\nsimilar to the first, for videos that play in a loop. Photos are compared as the\nvideo shows them: aligned and cropped like the aligned previews.",
         "operationId": "sorted_order_api_sorted_get",
         "parameters": [
           {
@@ -589,12 +589,12 @@
             "title": "Keep",
             "default": 1.0
           },
-          "max_extent": {
+          "zoom": {
             "type": "number",
             "maximum": 10.0,
             "minimum": 1.0,
-            "title": "Max Extent",
-            "default": 3.0
+            "title": "Zoom",
+            "default": 1.0
           },
           "grade": {
             "type": "boolean",

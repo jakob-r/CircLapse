@@ -140,7 +140,7 @@ function Tile({
         {skipped ? (
           <button onClick={() => onSkip(false)}>Restore</button>
         ) : (
-          <button className="icon" title="Remove from the video" onClick={() => onSkip(true)}>
+          <button className="icon" title="Skip this photo" onClick={() => onSkip(true)}>
             ✕
           </button>
         )}
@@ -218,7 +218,7 @@ export function Studio() {
           <h1>{p.name}</h1>
           <span className="meta">
             {p.frames} frames
-            {p.skipped.length > 0 && ` · ${p.skipped.length} removed`}
+            {p.skipped.length > 0 && ` · ${p.skipped.length} skipped`}
             {dropped > 0 && ` · ${dropped} cropped out`}
             {unusable > 0 && ` · ${unusable} without circle`}
             {p.extent !== null && ` · circle fills ${Math.round(100 / p.extent)}% of the frame`}
@@ -288,12 +288,12 @@ export function Studio() {
       {error && <div className="message error">Saving failed: {error}</div>}
       {sortError && <div className="message error">Sorting failed: {sortError}</div>}
       <p className="hint">
-        Drag photos to reorder, ✕ removes one from the video, click a photo to correct its
+        Drag photos to reorder, ✕ skips one, click a photo to correct its
         ellipse.
       </p>
 
       {included.length === 0 ? (
-        <div className="message">All photos are removed.</div>
+        <div className="message">All photos are skipped.</div>
       ) : (
         <div
           className="grid studio-grid"
@@ -338,7 +338,7 @@ export function Studio() {
 
       {p.skipped.length > 0 && (
         <section className="skipped">
-          <h2>Removed ({p.skipped.length})</h2>
+          <h2>Skipped ({p.skipped.length})</h2>
           <div className="grid studio-grid small">
             {p.skipped.map((name) => {
               const photo = photos.get(name);

@@ -19,8 +19,9 @@ from typing import Literal
 from pydantic import AliasChoices, BaseModel, Field
 
 from circlapse.detect.base import Detector
-from circlapse.labels import Dataset, ImageLabel, list_images, save_labels
+from circlapse.labels import IMAGE_SUFFIXES, Dataset, ImageLabel, list_images, save_labels
 from circlapse.organize import Photo, dated_name, detect_all, read_photo
+from circlapse.raw import JPEG_SUFFIXES, is_raw, raw_to_jpeg
 from circlapse.render import RenderConfig
 
 PROJECT_FILE = "project.json"
@@ -38,7 +39,7 @@ class ExportSettings(BaseModel):
     size: int = Field(RenderConfig.size, ge=64, le=4096)
     fps: float = Field(RenderConfig.fps, gt=0, le=60)
     keep: float = Field(RenderConfig.keep, gt=0, le=1)
-    max_extent: float = Field(RenderConfig.max_extent, ge=1, le=10)
+    zoom: float = Field(RenderConfig.zoom, ge=1, le=10)
     grade: bool = RenderConfig.grade
 
     def render_config(self) -> RenderConfig:
@@ -46,7 +47,7 @@ class ExportSettings(BaseModel):
             size=self.size,
             fps=self.fps,
             keep=self.keep,
-            max_extent=self.max_extent,
+            zoom=self.zoom,
             grade=self.grade,
         )
 
@@ -135,6 +136,25 @@ def adopt_label_skips(project: Project, dataset: Dataset) -> bool:
     return changed
 
 
+def _stage(source: Path, work: Path, log: Callable[[str], None]) -> None:
+    """Make ``work`` hold every photo of ``source``: images are linked, camera RAW files are
+    converted to JPEG. A RAW file is skipped when a JPEG of the same name is already there."""
+    files = sorted(p for p in source.iterdir() if p.is_file() and not p.name.startswith("."))
+    jpeg_stems = {p.stem.lower() for p in files if p.suffix.lower() in JPEG_SUFFIXES}
+    for p in files:
+        if is_raw(p):
+            if p.stem.lower() in jpeg_stems:
+                log(f"{p.name}: skipped, a JPEG of the same name exists")
+                continue
+            log(f"{p.name}: converting RAW to JPEG")
+            raw_to_jpeg(p, work / f"{p.stem}.jpg")
+        elif p.suffix.lower() in IMAGE_SUFFIXES:
+            try:
+                os.symlink(p.resolve(), work / p.name)
+            except OSError:  # no symlinks on this file system (e.g. Windows without developer mode)
+                shutil.copy2(p, work / p.name)
+
+
 def create_project(
     source: Path,
     directory: Path,
@@ -144,23 +164,26 @@ def create_project(
 ) -> Project:
     """Detect ellipses in the photos directly in ``source`` and copy those with one into
     ``directory``, which becomes a project sorted by capture time."""
-    photos = detect_all(source, detector, log=log, fallback=fallback)
     directory.mkdir(parents=True, exist_ok=True)
     labels: dict[str, ImageLabel] = {}
     times: dict[str, datetime | None] = {}
     skipped = []
-    for photo in photos:
-        if not photo.label.ellipses:
-            skipped.append(photo.name)
-            continue
-        name = dated_name(photo)
-        stem, suffix, i = Path(name).stem, Path(name).suffix, 2
-        while name in labels or (directory / name).exists():
-            name = f"{stem}_{i}{suffix}"
-            i += 1
-        shutil.copy2(source / photo.name, directory / name)
-        labels[name] = photo.label
-        times[name] = photo.time
+    with tempfile.TemporaryDirectory(prefix=".staging-", dir=directory) as staging:
+        work = Path(staging)
+        _stage(source, work, log)
+        photos = detect_all(work, detector, log=log, fallback=fallback)
+        for photo in photos:
+            if not photo.label.ellipses:
+                skipped.append(photo.name)
+                continue
+            name = dated_name(photo)
+            stem, suffix, i = Path(name).stem, Path(name).suffix, 2
+            while name in labels or (directory / name).exists():
+                name = f"{stem}_{i}{suffix}"
+                i += 1
+            shutil.copy2(work / photo.name, directory / name)
+            labels[name] = photo.label
+            times[name] = photo.time
     if skipped:
         log(f"no ellipse found in {len(skipped)} photos (not copied): {', '.join(skipped)}")
     save_labels(directory / "labels.json", labels)

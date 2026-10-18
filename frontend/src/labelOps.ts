@@ -31,7 +31,8 @@ export function setProminent(label: Label, i: number): Label {
   return { ...label, prominent: i, status: "labeled", source: "human" };
 }
 
-/** Toggle a terminal status ("no_ellipse" / "skip"); toggling off restores the content status. */
+/** Toggle a terminal status ("no_ellipse" / "skip"); toggling off restores the content status.
+ * "no_ellipse" also removes the ellipses: the photo has none. */
 export function toggleStatus(label: Label, status: "no_ellipse" | "skip"): Label {
   if (label.status === status) {
     const has = label.ellipses.length > 0;
@@ -41,5 +42,6 @@ export function toggleStatus(label: Label, status: "no_ellipse" | "skip"): Label
       prominent: has ? (label.prominent ?? 0) : null,
     };
   }
-  return { ...label, status, prominent: status === "no_ellipse" ? null : label.prominent };
+  if (status === "no_ellipse") return { ...label, ellipses: [], status, prominent: null };
+  return { ...label, status };
 }

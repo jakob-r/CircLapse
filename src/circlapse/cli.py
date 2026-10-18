@@ -60,7 +60,7 @@ def make(
 ) -> None:
     """Make a circlapse: detect circles, copy the candidates into a project and open the studio.
 
-    The studio lets you remove photos, correct ellipses, reorder and export the video.
+    The studio lets you skip photos, correct ellipses, reorder and export the video.
     Run it again on the same folder to reopen the project.
     --from-apple-photos needs the photos extra and Full Disk Access for the terminal.
     """
@@ -341,9 +341,9 @@ def render(
     keep: Annotated[
         float, typer.Option(help="Fraction of photos to keep; dropping some widens the crop")
     ] = 1.0,
-    max_extent: Annotated[
-        float, typer.Option(help="Widest crop, as frame half side in circle radii")
-    ] = 3.0,
+    zoom: Annotated[
+        float, typer.Option(help="Crop tighter than the widest crop that fits (1 = no extra zoom)")
+    ] = 1.0,
     grade: Annotated[bool, typer.Option(help="Mild automatic color and exposure grade")] = True,
     gif_size: Annotated[int | None, typer.Option(help="GIF side length [default: --size]")] = None,
     frames: Annotated[Path | None, typer.Option(help="Also keep the frames as PNGs here")] = None,
@@ -392,9 +392,7 @@ def render(
             or (e.score or 0.0) >= min_confidence
         )
     }
-    cfg = RenderConfig(
-        size=size, fps=fps, keep=keep, max_extent=max_extent, grade=grade, gif_size=gif_size
-    )
+    cfg = RenderConfig(size=size, fps=fps, keep=keep, zoom=zoom, grade=grade, gif_size=gif_size)
     out = out or data / "circlapse" / data.name
     result = run_render(data, usable, out, cfg, fmts, frames, log=_log)
     if result.dropped:
