@@ -353,8 +353,8 @@ export interface components {
             path: string;
             /** Order */
             order: string[];
-            /** Excluded */
-            excluded: string[];
+            /** Skipped */
+            skipped: string[];
             settings: components["schemas"]["ExportSettings"];
             /** Extent */
             extent: number | null;
@@ -367,8 +367,8 @@ export interface components {
         ProjectUpdate: {
             /** Order */
             order: string[];
-            /** Excluded */
-            excluded: string[];
+            /** Skipped */
+            skipped: string[];
             settings: components["schemas"]["ExportSettings"];
         };
         /** ScoredEllipse */

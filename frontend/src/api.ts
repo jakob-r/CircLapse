@@ -81,7 +81,7 @@ export const FORMATS: Format[] = ["mp4", "webm", "gif"];
 
 export interface ProjectUpdate {
   order: string[];
-  excluded: string[];
+  skipped: string[];
   settings: ExportSettings;
 }
 

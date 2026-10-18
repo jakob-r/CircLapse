@@ -50,7 +50,7 @@ class ProjectInfo(BaseModel):
     name: str
     path: str
     order: list[str]
-    excluded: list[str]
+    skipped: list[str]
     settings: ExportSettings
     # Common crop as frame half side in circle radii; None when no photo can be a frame
     extent: float | None
@@ -60,7 +60,7 @@ class ProjectInfo(BaseModel):
 
 class ProjectUpdate(BaseModel):
     order: list[str]
-    excluded: list[str]
+    skipped: list[str]
     settings: ExportSettings
 
 
@@ -121,7 +121,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
 
     def info() -> ProjectInfo:
         frames, dropped, extent = plan(project)
-        dropped_set, excluded = set(dropped), set(project.excluded)
+        dropped_set, skipped = set(dropped), set(project.skipped)
         photos = []
         for name in project.order:
             label = dataset.label(name)
@@ -137,7 +137,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
                     name=name,
                     time=project.times.get(name),
                     usable=usable,
-                    dropped=usable and name in dropped_set and name not in excluded,
+                    dropped=usable and name in dropped_set and name not in skipped,
                     preview=preview,
                 )
             )
@@ -145,7 +145,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
             name=project.name,
             path=str(project_dir),
             order=project.order,
-            excluded=project.excluded,
+            skipped=project.skipped,
             settings=project.settings,
             extent=extent,
             frames=len(frames),
@@ -162,10 +162,10 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     def put_project(update: ProjectUpdate) -> ProjectInfo:
         if sorted(update.order) != sorted(project.order):
             raise HTTPException(422, "order must contain every photo of the project exactly once")
-        if not set(update.excluded) <= set(project.order):
-            raise HTTPException(422, "excluded photos must be part of the project")
+        if not set(update.skipped) <= set(project.order):
+            raise HTTPException(422, "skipped photos must be part of the project")
         project.order = update.order
-        project.excluded = [n for n in update.order if n in set(update.excluded)]
+        project.skipped = [n for n in update.order if n in set(update.skipped)]
         project.settings = update.settings
         save_project(project_dir, project)
         return info()

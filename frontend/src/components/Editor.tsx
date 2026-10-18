@@ -13,7 +13,7 @@ import {
 } from "../api";
 import { cropCorners, maxExtent, type Ellipse, type Point } from "../geometry";
 import { addEllipse, deleteEllipse, setProminent, toggleStatus, updateEllipse } from "../labelOps";
-import { setExcluded } from "../projectOps";
+import { setSkipped } from "../projectOps";
 import { gridRoute, imageRoute } from "../routes";
 import { EllipseCanvas } from "./EllipseCanvas";
 import { storedView, useProjectUpdate } from "./Studio";
@@ -126,16 +126,16 @@ function EditorLoaded({
     if (next) window.location.hash = imageRoute(next.name);
   };
 
-  // In the studio, skipping a photo excludes it from the project (the grid's ✕ / Restore)
-  // and keeps its ellipse; a photo without an ellipse also leaves the video
+  // In the studio, skipping a photo puts it in the project's skipped list (the grid's ✕ /
+  // Restore) and keeps its ellipse; a photo without an ellipse also leaves the video
   const project = useProject().data;
   const projectUpdate = useProjectUpdate().update;
-  const excluded = project?.excluded.includes(name) ?? false;
-  const shownStatus = project && excluded && label.status !== "no_ellipse" ? "skip" : label.status;
+  const skipped = project?.skipped.includes(name) ?? false;
+  const shownStatus = project && skipped && label.status !== "no_ellipse" ? "skip" : label.status;
   const markStatus = (status: "no_ellipse" | "skip") => {
     if (project && status === "skip") {
-      projectUpdate((u) => ({ ...u, excluded: setExcluded(u.excluded, name, !excluded) }));
-      if (!excluded) {
+      projectUpdate((u) => ({ ...u, skipped: setSkipped(u.skipped, name, !skipped) }));
+      if (!skipped) {
         setSelected(null);
         go(1);
       }
@@ -143,7 +143,7 @@ function EditorLoaded({
     }
     const on = latest.current.status !== status;
     update((l) => toggleStatus(l, status));
-    if (project) projectUpdate((u) => ({ ...u, excluded: setExcluded(u.excluded, name, on) }));
+    if (project) projectUpdate((u) => ({ ...u, skipped: setSkipped(u.skipped, name, on) }));
     if (on) {
       setSelected(null);
       go(1);

@@ -2,7 +2,7 @@
 
 A project is a folder with copies of every source photo in which the detector found an ellipse
 (named ``YYYYMMDD-HHMMSS_<original>``), their ``labels.json`` and a ``project.json`` that
-records the frame order, the photos the user excluded and the export settings. The source
+records the frame order, the photos the user skipped and the export settings. The source
 folder is never changed; photos without an ellipse are not copied.
 """
 
@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from circlapse.detect.base import Detector
 from circlapse.labels import Dataset, ImageLabel, list_images, save_labels
@@ -55,14 +55,17 @@ class Project(BaseModel):
     name: str = "circlapse"
     source: str = ""
     order: list[str] = Field(default_factory=list)
-    excluded: list[str] = Field(default_factory=list)
+    # Older projects call it excluded
+    skipped: list[str] = Field(
+        default_factory=list, validation_alias=AliasChoices("skipped", "excluded")
+    )
     times: dict[str, datetime | None] = Field(default_factory=dict)
     settings: ExportSettings = Field(default_factory=ExportSettings)
 
     @property
     def included(self) -> list[str]:
-        excluded = set(self.excluded)
-        return [n for n in self.order if n not in excluded]
+        skipped = set(self.skipped)
+        return [n for n in self.order if n not in skipped]
 
 
 def load_project(directory: Path) -> Project:
@@ -100,18 +103,18 @@ def sync(project: Project, directory: Path) -> bool:
         project.times[name] = read_photo(directory / name).time
     changed = len(order) != len(project.order) or bool(new)
     project.order = order + _by_time(new, project.times)
-    project.excluded = [n for n in project.excluded if n in present]
+    project.skipped = [n for n in project.skipped if n in present]
     project.times = {n: t for n, t in project.times.items() if n in present}
     return changed
 
 
 def adopt_label_skips(project: Project, dataset: Dataset) -> bool:
-    """In a project, skipping a photo means excluding it. Labels marked ``skip`` (by the
-    annotator or an older studio) become exclusions and get their ellipse status back.
+    """In a project, a skipped photo is one in ``Project.skipped``. Labels marked ``skip``
+    (by the annotator or an older studio) are moved there and get their ellipse status back.
 
     Returns whether the project changed; the labels are saved when they did.
     """
-    excluded = set(project.excluded)
+    skipped = set(project.skipped)
     changed = False
     for name in project.order:
         label = dataset.labels.get(name)
@@ -124,11 +127,11 @@ def adopt_label_skips(project: Project, dataset: Dataset) -> bool:
                 "prominent": (label.prominent or 0) if has else None,
             }
         )
-        excluded.add(name)
+        skipped.add(name)
         changed = True
     if changed:
         dataset.save()
-        project.excluded = [n for n in project.order if n in excluded]
+        project.skipped = [n for n in project.order if n in skipped]
     return changed
 
 

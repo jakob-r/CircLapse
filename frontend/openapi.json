@@ -883,12 +883,12 @@
             "type": "array",
             "title": "Order"
           },
-          "excluded": {
+          "skipped": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Excluded"
+            "title": "Skipped"
           },
           "settings": {
             "$ref": "#/components/schemas/ExportSettings"
@@ -921,7 +921,7 @@
           "name",
           "path",
           "order",
-          "excluded",
+          "skipped",
           "settings",
           "extent",
           "frames",
@@ -938,12 +938,12 @@
             "type": "array",
             "title": "Order"
           },
-          "excluded": {
+          "skipped": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Excluded"
+            "title": "Skipped"
           },
           "settings": {
             "$ref": "#/components/schemas/ExportSettings"
@@ -952,7 +952,7 @@
         "type": "object",
         "required": [
           "order",
-          "excluded",
+          "skipped",
           "settings"
         ],
         "title": "ProjectUpdate"
