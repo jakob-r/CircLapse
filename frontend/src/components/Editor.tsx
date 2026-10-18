@@ -7,13 +7,15 @@ import {
   saveLabel,
   useImages,
   usePrediction,
+  useProject,
   type ImageInfo,
   type Label,
 } from "../api";
-import type { Ellipse, Point } from "../geometry";
+import { cropCorners, maxExtent, type Ellipse, type Point } from "../geometry";
 import { addEllipse, deleteEllipse, setProminent, toggleStatus, updateEllipse } from "../labelOps";
 import { gridRoute, imageRoute } from "../routes";
 import { EllipseCanvas } from "./EllipseCanvas";
+import { storedView } from "./Studio";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
@@ -123,6 +125,15 @@ function EditorLoaded({
     if (next) window.location.hash = imageRoute(next.name);
   };
 
+  // Coming from the studio's aligned view: dim what the video crops away, so the photos
+  // that limit the common crop stand out
+  const project = useProject().data;
+  const prominentEllipse = label.prominent !== null ? label.ellipses[label.prominent] : undefined;
+  const extent = project?.extent ?? null;
+  const showCrop = storedView() === "aligned" && prominentEllipse && extent !== null;
+  const crop = showCrop ? cropCorners(prominentEllipse, extent) : undefined;
+  const room = showCrop ? maxExtent(prominentEllipse, info.width, info.height) / extent : null;
+
   const startDrawing = () => {
     setDrawing(true);
     setPoints([]);
@@ -206,6 +217,7 @@ function EditorLoaded({
         drawPoints={points}
         drawPreview={preview}
         fitSignal={fitSignal}
+        crop={crop}
         onSelect={setSelected}
         onChange={(i, e) => update((l) => updateEllipse(l, i, e))}
         onAcceptPrediction={accept}
@@ -230,6 +242,15 @@ function EditorLoaded({
         <div className="meta">
           {info.width}×{info.height} · <span className={`save ${save.state}`}>{save.state}</span>
         </div>
+        {room !== null && (
+          <div className="meta" title="How far the video crop could grow before leaving this photo">
+            {room < 1 - 1e-9
+              ? "Cropped out: the video frame leaves this photo"
+              : room < 1.02
+                ? "Limits the crop: the video frame touches the border"
+                : `Crop could grow ${Math.round((room - 1) * 100)}% in this photo`}
+          </div>
+        )}
 
         <section>
           <h3>Status</h3>

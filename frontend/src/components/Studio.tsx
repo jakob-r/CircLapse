@@ -20,15 +20,18 @@ import { ThumbImage } from "./ThumbImage";
 type View = "photos" | "aligned";
 const VIEW_KEY = "circlapse.studio.view";
 
+/** The grid view last chosen in the studio; the editor shows the crop when it is "aligned". */
+export function storedView(): View {
+  try {
+    return sessionStorage.getItem(VIEW_KEY) === "aligned" ? "aligned" : "photos";
+  } catch {
+    return "photos";
+  }
+}
+
 /** The grid view survives trips to the editor (which unmount the studio). */
 function useView(): [View, (v: View) => void] {
-  const [view, setView] = useState<View>(() => {
-    try {
-      return sessionStorage.getItem(VIEW_KEY) === "aligned" ? "aligned" : "photos";
-    } catch {
-      return "photos";
-    }
-  });
+  const [view, setView] = useState<View>(storedView);
   const set = (v: View) => {
     setView(v);
     try {
