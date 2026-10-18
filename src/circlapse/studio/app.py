@@ -24,6 +24,7 @@ from circlapse.studio.project import (
     EXPORT_DIR,
     ExportSettings,
     Project,
+    adopt_label_skips,
     load_project,
     save_project,
     sync,
@@ -84,9 +85,9 @@ def _preview_key(e: Ellipse, extent: float, size: int, graded: bool) -> str:
 def create_studio_app(project_dir: Path) -> FastAPI:
     project_dir = project_dir.resolve()
     project = load_project(project_dir)
-    if sync(project, project_dir):
-        save_project(project_dir, project)
     dataset = Dataset(project_dir)
+    if sync(project, project_dir) | adopt_label_skips(project, dataset):
+        save_project(project_dir, project)
     store = ImageStore(dataset)
     export_dir = project_dir / EXPORT_DIR
     status = ExportStatus(directory=str(export_dir))
@@ -153,7 +154,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
 
     @app.get("/api/project")
     def get_project() -> ProjectInfo:
-        if sync(project, project_dir):
+        if sync(project, project_dir) | adopt_label_skips(project, dataset):
             save_project(project_dir, project)
         return info()
 

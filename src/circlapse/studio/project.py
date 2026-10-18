@@ -105,6 +105,33 @@ def sync(project: Project, directory: Path) -> bool:
     return changed
 
 
+def adopt_label_skips(project: Project, dataset: Dataset) -> bool:
+    """In a project, skipping a photo means excluding it. Labels marked ``skip`` (by the
+    annotator or an older studio) become exclusions and get their ellipse status back.
+
+    Returns whether the project changed; the labels are saved when they did.
+    """
+    excluded = set(project.excluded)
+    changed = False
+    for name in project.order:
+        label = dataset.labels.get(name)
+        if label is None or label.status != "skip":
+            continue
+        has = bool(label.ellipses)
+        dataset.labels[name] = label.model_copy(
+            update={
+                "status": "labeled" if has else "unlabeled",
+                "prominent": (label.prominent or 0) if has else None,
+            }
+        )
+        excluded.add(name)
+        changed = True
+    if changed:
+        dataset.save()
+        project.excluded = [n for n in project.order if n in excluded]
+    return changed
+
+
 def create_project(
     source: Path,
     directory: Path,

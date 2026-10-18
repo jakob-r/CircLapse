@@ -13,9 +13,10 @@ import {
 } from "../api";
 import { cropCorners, maxExtent, type Ellipse, type Point } from "../geometry";
 import { addEllipse, deleteEllipse, setProminent, toggleStatus, updateEllipse } from "../labelOps";
+import { setExcluded } from "../projectOps";
 import { gridRoute, imageRoute } from "../routes";
 import { EllipseCanvas } from "./EllipseCanvas";
-import { storedView } from "./Studio";
+import { storedView, useProjectUpdate } from "./Studio";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
@@ -125,9 +126,32 @@ function EditorLoaded({
     if (next) window.location.hash = imageRoute(next.name);
   };
 
+  // In the studio, skipping a photo excludes it from the project (the grid's ✕ / Restore)
+  // and keeps its ellipse; a photo without an ellipse also leaves the video
+  const project = useProject().data;
+  const projectUpdate = useProjectUpdate().update;
+  const excluded = project?.excluded.includes(name) ?? false;
+  const shownStatus = project && excluded && label.status !== "no_ellipse" ? "skip" : label.status;
+  const markStatus = (status: "no_ellipse" | "skip") => {
+    if (project && status === "skip") {
+      projectUpdate((u) => ({ ...u, excluded: setExcluded(u.excluded, name, !excluded) }));
+      if (!excluded) {
+        setSelected(null);
+        go(1);
+      }
+      return;
+    }
+    const on = latest.current.status !== status;
+    update((l) => toggleStatus(l, status));
+    if (project) projectUpdate((u) => ({ ...u, excluded: setExcluded(u.excluded, name, on) }));
+    if (on) {
+      setSelected(null);
+      go(1);
+    }
+  };
+
   // Coming from the studio's aligned view: dim what the video crops away, so the photos
   // that limit the common crop stand out
-  const project = useProject().data;
   const prominentEllipse = label.prominent !== null ? label.ellipses[label.prominent] : undefined;
   const extent = project?.extent ?? null;
   const showCrop = storedView() === "aligned" && prominentEllipse && extent !== null;
@@ -186,8 +210,8 @@ function EditorLoaded({
         d: () => (drawing ? stopDrawing() : startDrawing()),
         f: () => setFitSignal((s) => s + 1),
         p: () => selected !== null && update((l) => setProminent(l, selected)),
-        n: () => update((l) => toggleStatus(l, "no_ellipse")),
-        s: () => update((l) => toggleStatus(l, "skip")),
+        n: () => markStatus("no_ellipse"),
+        s: () => markStatus("skip"),
         a: () => predictions[0] && accept(predictions[0]),
         Delete: () => selected !== null && remove(selected),
         Backspace: () => selected !== null && remove(selected),
@@ -255,16 +279,16 @@ function EditorLoaded({
         <section>
           <h3>Status</h3>
           <div className="status-row">
-            <span className={`badge ${label.status}`}>{label.status.replace("_", " ")}</span>
+            <span className={`badge ${shownStatus}`}>{shownStatus.replace("_", " ")}</span>
             <button
-              className={label.status === "no_ellipse" ? "active" : ""}
-              onClick={() => update((l) => toggleStatus(l, "no_ellipse"))}
+              className={shownStatus === "no_ellipse" ? "active" : ""}
+              onClick={() => markStatus("no_ellipse")}
             >
               No ellipse <kbd>n</kbd>
             </button>
             <button
-              className={label.status === "skip" ? "active" : ""}
-              onClick={() => update((l) => toggleStatus(l, "skip"))}
+              className={shownStatus === "skip" ? "active" : ""}
+              onClick={() => markStatus("skip")}
             >
               Skip <kbd>s</kbd>
             </button>
