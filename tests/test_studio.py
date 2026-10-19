@@ -108,6 +108,22 @@ def test_skipped_photos_do_not_limit_the_crop(project):
     assert skipped["frames"] == info["frames"] - 1
 
 
+def test_photo_closest_to_the_border_limits_the_crop(project):
+    _, proj = project
+    labels = load_labels(proj / "labels.json")
+    near_border = ScoredEllipse(cx=35, cy=60, a=30, b=28, angle_deg=10, score=0.9)
+    labels["undated.jpg"] = labels["undated.jpg"].model_copy(update={"ellipses": [near_border]})
+    save_labels(proj / "labels.json", labels)
+    c = TestClient(create_studio_app(proj))
+    info = c.get("/api/project").json()
+    assert [ph["name"] for ph in info["photos"] if ph["limiting"]] == ["undated.jpg"]
+    # Skipped, it still gets flagged because restoring it would tighten the crop again
+    update = {"order": info["order"], "skipped": ["undated.jpg"], "settings": info["settings"]}
+    skipped = c.put("/api/project", json=update).json()
+    flagged = [ph["name"] for ph in skipped["photos"] if ph["limiting"]]
+    assert "undated.jpg" in flagged and len(flagged) > 1
+
+
 def test_reads_older_project_files_with_excluded(project):
     _, proj = project
     data = json.loads((proj / "project.json").read_text())

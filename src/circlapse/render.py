@@ -77,14 +77,20 @@ def max_extent(e: Ellipse, shape: tuple[int, ...]) -> float:
     return max(0.0, min(bounds))
 
 
-def choose_extent(extents: Iterable[float], cfg: RenderConfig) -> float:
-    """Common crop extent: the widest that fits a fraction ``cfg.keep`` of the photos, zoomed in
-    by ``cfg.zoom`` but never tighter than ``cfg.min_extent``."""
+def widest_extent(extents: Iterable[float], cfg: RenderConfig) -> float:
+    """Widest crop extent that fits a fraction ``cfg.keep`` of the photos, before zoom: the
+    ``max_extent`` of the kept photo whose circle is closest to the border."""
     ok = sorted((s for s in extents if s >= cfg.min_extent), reverse=True)
     if not ok:
         raise ValueError(f"no photo leaves room for a crop of {cfg.min_extent} circle radii")
     n = max(1, math.ceil(cfg.keep * len(ok)))
-    return max(cfg.min_extent, ok[n - 1] / cfg.zoom)
+    return ok[n - 1]
+
+
+def choose_extent(extents: Iterable[float], cfg: RenderConfig) -> float:
+    """Common crop extent: the widest that fits a fraction ``cfg.keep`` of the photos, zoomed in
+    by ``cfg.zoom`` but never tighter than ``cfg.min_extent``."""
+    return max(cfg.min_extent, widest_extent(extents, cfg) / cfg.zoom)
 
 
 def warp_matrix(e: Ellipse, extent: float, size: int) -> np.ndarray:

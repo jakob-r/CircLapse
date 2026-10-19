@@ -7,6 +7,7 @@ const photo = (name: string, time: string | null): PhotoInfo => ({
   time,
   usable: true,
   dropped: false,
+  limiting: false,
   preview: null,
 });
 

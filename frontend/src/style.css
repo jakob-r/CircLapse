@@ -441,6 +441,11 @@ button.primary {
   min-width: 0;
   font-size: 12px;
 }
+.tile-limiting {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent);
+}
 .tile-time {
   flex: 1;
   overflow: hidden;

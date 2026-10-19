@@ -860,6 +860,10 @@
             "type": "boolean",
             "title": "Dropped"
           },
+          "limiting": {
+            "type": "boolean",
+            "title": "Limiting"
+          },
           "preview": {
             "anyOf": [
               {
@@ -878,6 +882,7 @@
           "time",
           "usable",
           "dropped",
+          "limiting",
           "preview"
         ],
         "title": "PhotoInfo"

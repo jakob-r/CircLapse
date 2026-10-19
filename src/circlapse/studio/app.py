@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from circlapse.annotate.app import ImageStore, annotation_router, mount_frontend
 from circlapse.ellipse import Ellipse
 from circlapse.labels import Dataset, load_image
-from circlapse.render import Frame, grade, plan_frames, render, warp
+from circlapse.render import Frame, grade, plan_frames, render, warp, widest_extent
 from circlapse.studio import embedding
 from circlapse.studio.project import (
     EXPORT_DIR,
@@ -51,6 +51,9 @@ class PhotoInfo(BaseModel):
     usable: bool
     # Included and usable, but its circle is too close to the border for the common crop
     dropped: bool
+    # Its circle is the one closest to the border, so it sets the common crop; for a skipped
+    # photo: restoring it would make the crop tighter
+    limiting: bool
     # Aligned preview URL, versioned by ellipse and crop; None when not usable
     preview: str | None
 
@@ -133,6 +136,25 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     def info() -> ProjectInfo:
         frames, dropped, extent = plan(project)
         dropped_set, skipped = set(dropped), set(project.skipped)
+        limiting = set()
+        if frames:
+            # Before zoom, the crop is the widest the kept photo closest to the border allows
+            sizes = shapes()
+            extents = [
+                Frame(n, label.prominent_ellipse, sizes[n]).max_extent
+                for n, label in usable_labels(project, dataset).items()
+                if label.prominent_ellipse is not None
+            ]
+            cfg = project.settings.render_config()
+            widest = widest_extent(extents, cfg)
+            limiting = {f.name for f in frames if abs(f.max_extent - widest) <= widest * 1e-9}
+            for n in skipped:
+                e = dataset.label(n).prominent_ellipse
+                if e is None or n not in sizes:
+                    continue
+                own = Frame(n, e, sizes[n]).max_extent
+                if widest_extent([*extents, own], cfg) < widest * (1 - 1e-9):
+                    limiting.add(n)
         photos = []
         for name in project.order:
             label = dataset.label(name)
@@ -149,6 +171,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
                     time=project.times.get(name),
                     usable=usable,
                     dropped=usable and name in dropped_set and name not in skipped,
+                    limiting=name in limiting,
                     preview=preview,
                 )
             )

@@ -82,6 +82,16 @@ function formatTime(time: string | null): string {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** A circle pressed against the edge of its frame. */
+function LimitingIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" aria-hidden>
+      <rect x="0.75" y="0.75" width="12.5" height="12.5" rx="1.5" strokeWidth="1.5" />
+      <circle cx="9" cy="7" r="3.5" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 function Tile({
   photo,
   info,
@@ -127,6 +137,18 @@ function Tile({
         {index !== null && <span className="tile-index">{index + 1}</span>}
       </a>
       <div className="tile-caption">
+        {photo.limiting && (
+          <span
+            className="tile-limiting"
+            title={
+              skipped
+                ? "Its circle is close to the border: restoring this photo would zoom the crop in"
+                : "Its circle is closest to the border, so this photo sets the zoom of the crop"
+            }
+          >
+            <LimitingIcon />
+          </span>
+        )}
         <span className="tile-time" title={photo.name}>
           {formatTime(photo.time)}
         </span>

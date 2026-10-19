@@ -344,6 +344,8 @@ export interface components {
             usable: boolean;
             /** Dropped */
             dropped: boolean;
+            /** Limiting */
+            limiting: boolean;
             /** Preview */
             preview: string | null;
         };
