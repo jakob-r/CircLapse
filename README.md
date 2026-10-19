@@ -7,6 +7,14 @@ Circlapse finds the most prominent ellipse in every photo with a neural network,
 so that the ellipse becomes a centered circle, picks the widest crop that works for all photos and
 encodes the sequence as mp4, webm or gif (1080 × 1080, 10 fps by default).
 
+<p align="center">
+  <img src="old_version/examples/example_in/_DSC2623.JPG" alt="input1" width="80">
+  <img src="old_version/examples/example_in/_DSC2666.JPG" alt="input2" width="80">
+  <img src="old_version/examples/example_in/_DSC2667.JPG" alt="input3" width="80">
+  <img src="old_version/examples/example_in/_DSC2715.JPG" alt="input4" width="80"></br>
+  <img src="old_version/examples/example_out/all.gif" alt="Example output animation" width="400">
+</p>
+
 ## Make a circlapse
 
 ```bash
