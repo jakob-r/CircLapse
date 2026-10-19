@@ -5,11 +5,13 @@ description = "Detect the most prominent ellipse in photos and align them into a
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "exifread>=3.5.1",
     "fastapi>=0.115",
     "numpy>=2.1",
     "opencv-python-headless>=4.10",
     "pillow>=11.0",
     "pydantic>=2.9",
+    "rawpy>=0.27.1",
     "typer>=0.15",
     "uvicorn>=0.32",
 ]

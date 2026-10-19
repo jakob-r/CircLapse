@@ -373,11 +373,11 @@ button.primary {
 .studio-grid.small {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
-.excluded {
+.skipped {
   border-top: 1px solid var(--border);
   margin-top: 8px;
 }
-.excluded h2 {
+.skipped h2 {
   margin: 16px 20px 0;
   font-size: 13px;
   text-transform: uppercase;
@@ -391,11 +391,11 @@ button.primary {
   gap: 6px;
   cursor: grab;
 }
-.tile.excluded {
+.tile.skipped {
   cursor: default;
   opacity: 0.55;
 }
-.tile.excluded:hover {
+.tile.skipped:hover {
   opacity: 1;
 }
 .tile.drop-before::before {

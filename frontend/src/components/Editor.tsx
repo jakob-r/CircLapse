@@ -7,13 +7,16 @@ import {
   saveLabel,
   useImages,
   usePrediction,
+  useProject,
   type ImageInfo,
   type Label,
 } from "../api";
-import type { Ellipse, Point } from "../geometry";
+import { cropCorners, maxExtent, type Ellipse, type Point } from "../geometry";
 import { addEllipse, deleteEllipse, setProminent, toggleStatus, updateEllipse } from "../labelOps";
+import { setSkipped } from "../projectOps";
 import { gridRoute, imageRoute } from "../routes";
 import { EllipseCanvas } from "./EllipseCanvas";
+import { storedView, useProjectUpdate } from "./Studio";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
@@ -123,6 +126,38 @@ function EditorLoaded({
     if (next) window.location.hash = imageRoute(next.name);
   };
 
+  // In the studio, skipping a photo puts it in the project's skipped list (the grid's ✕ /
+  // Restore) and keeps its ellipse; a photo without an ellipse also leaves the video
+  const project = useProject().data;
+  const projectUpdate = useProjectUpdate().update;
+  const skipped = project?.skipped.includes(name) ?? false;
+  const shownStatus = project && skipped && label.status !== "no_ellipse" ? "skip" : label.status;
+  const markStatus = (status: "no_ellipse" | "skip") => {
+    if (project && status === "skip") {
+      projectUpdate((u) => ({ ...u, skipped: setSkipped(u.skipped, name, !skipped) }));
+      if (!skipped) {
+        setSelected(null);
+        go(1);
+      }
+      return;
+    }
+    const on = latest.current.status !== status;
+    update((l) => toggleStatus(l, status));
+    if (project) projectUpdate((u) => ({ ...u, skipped: setSkipped(u.skipped, name, on) }));
+    if (on) {
+      setSelected(null);
+      go(1);
+    }
+  };
+
+  // Coming from the studio's aligned view: dim what the video crops away, so the photos
+  // that limit the common crop stand out
+  const prominentEllipse = label.prominent !== null ? label.ellipses[label.prominent] : undefined;
+  const extent = project?.extent ?? null;
+  const showCrop = storedView() === "aligned" && prominentEllipse && extent !== null;
+  const crop = showCrop ? cropCorners(prominentEllipse, extent) : undefined;
+  const room = showCrop ? maxExtent(prominentEllipse, info.width, info.height) / extent : null;
+
   const startDrawing = () => {
     setDrawing(true);
     setPoints([]);
@@ -175,8 +210,8 @@ function EditorLoaded({
         d: () => (drawing ? stopDrawing() : startDrawing()),
         f: () => setFitSignal((s) => s + 1),
         p: () => selected !== null && update((l) => setProminent(l, selected)),
-        n: () => update((l) => toggleStatus(l, "no_ellipse")),
-        s: () => update((l) => toggleStatus(l, "skip")),
+        n: () => markStatus("no_ellipse"),
+        s: () => markStatus("skip"),
         a: () => predictions[0] && accept(predictions[0]),
         Delete: () => selected !== null && remove(selected),
         Backspace: () => selected !== null && remove(selected),
@@ -206,6 +241,7 @@ function EditorLoaded({
         drawPoints={points}
         drawPreview={preview}
         fitSignal={fitSignal}
+        crop={crop}
         onSelect={setSelected}
         onChange={(i, e) => update((l) => updateEllipse(l, i, e))}
         onAcceptPrediction={accept}
@@ -230,20 +266,29 @@ function EditorLoaded({
         <div className="meta">
           {info.width}×{info.height} · <span className={`save ${save.state}`}>{save.state}</span>
         </div>
+        {room !== null && (
+          <div className="meta" title="How far the video crop could grow before leaving this photo">
+            {room < 1 - 1e-9
+              ? "Cropped out: the video frame leaves this photo"
+              : room < 1.02
+                ? "Limits the crop: the video frame touches the border"
+                : `Crop could grow ${Math.round((room - 1) * 100)}% in this photo`}
+          </div>
+        )}
 
         <section>
           <h3>Status</h3>
           <div className="status-row">
-            <span className={`badge ${label.status}`}>{label.status.replace("_", " ")}</span>
+            <span className={`badge ${shownStatus}`}>{shownStatus.replace("_", " ")}</span>
             <button
-              className={label.status === "no_ellipse" ? "active" : ""}
-              onClick={() => update((l) => toggleStatus(l, "no_ellipse"))}
+              className={shownStatus === "no_ellipse" ? "active" : ""}
+              onClick={() => markStatus("no_ellipse")}
             >
               No ellipse <kbd>n</kbd>
             </button>
             <button
-              className={label.status === "skip" ? "active" : ""}
-              onClick={() => update((l) => toggleStatus(l, "skip"))}
+              className={shownStatus === "skip" ? "active" : ""}
+              onClick={() => markStatus("skip")}
             >
               Skip <kbd>s</kbd>
             </button>

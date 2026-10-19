@@ -1,6 +1,6 @@
 import type Konva from "konva";
 import { useEffect, useRef, useState } from "react";
-import { Circle, Ellipse as KEllipse, Image as KImage, Layer, Stage } from "react-konva";
+import { Circle, Ellipse as KEllipse, Image as KImage, Layer, Line, Shape, Stage } from "react-konva";
 import type { ScoredEllipse } from "../api";
 import {
   clampView,
@@ -29,6 +29,8 @@ interface Props {
   drawPoints: Point[];
   drawPreview: Ellipse | null;
   fitSignal: number;
+  /** Corners of the video frame; the photo outside it is dimmed. */
+  crop?: Point[];
   onSelect: (i: number | null) => void;
   onChange: (i: number, e: Ellipse) => void;
   onAcceptPrediction: (e: Ellipse) => void;
@@ -157,6 +159,39 @@ export function EllipseCanvas(props: Props) {
         <Layer>
           {props.image && (
             <KImage name="image" image={props.image} width={width} height={height} />
+          )}
+          {props.crop && (
+            <>
+              <Shape
+                listening={false}
+                fill="rgba(0, 0, 0, 0.55)"
+                sceneFunc={(ctx, shape) => {
+                  const c = props.crop!;
+                  const g = ctx._context;
+                  g.save();
+                  g.beginPath();
+                  g.rect(0, 0, width, height);
+                  g.clip();
+                  // even-odd within the photo: the frame is a hole in the dimmed rectangle
+                  g.beginPath();
+                  g.rect(0, 0, width, height);
+                  g.moveTo(c[0]!.x, c[0]!.y);
+                  for (const p of c.slice(1)) g.lineTo(p.x, p.y);
+                  g.closePath();
+                  g.fillStyle = shape.fill() as string;
+                  g.fill("evenodd");
+                  g.restore();
+                }}
+              />
+              <Line
+                listening={false}
+                points={props.crop.flatMap((p) => [p.x, p.y])}
+                closed
+                stroke="rgba(255, 255, 255, 0.8)"
+                strokeWidth={px}
+                dash={[6 * px, 4 * px]}
+              />
+            </>
           )}
         </Layer>
         <Layer>

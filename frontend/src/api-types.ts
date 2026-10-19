@@ -153,7 +153,8 @@ export interface paths {
          * Sorted Order
          * @description The project order with the photos that have a circle arranged by similarity;
          *     the others keep their relative order at the end. ``loop`` makes the last photo
-         *     similar to the first, for videos that play in a loop.
+         *     similar to the first, for videos that play in a loop. Photos are compared as the
+         *     video shows them: aligned and cropped like the aligned previews.
          */
         get: operations["sorted_order_api_sorted_get"];
         put?: never;
@@ -239,10 +240,10 @@ export interface components {
              */
             keep: number;
             /**
-             * Max Extent
-             * @default 3
+             * Zoom
+             * @default 1
              */
-            max_extent: number;
+            zoom: number;
             /**
              * Grade
              * @default true
@@ -353,8 +354,8 @@ export interface components {
             path: string;
             /** Order */
             order: string[];
-            /** Excluded */
-            excluded: string[];
+            /** Skipped */
+            skipped: string[];
             settings: components["schemas"]["ExportSettings"];
             /** Extent */
             extent: number | null;
@@ -367,8 +368,8 @@ export interface components {
         ProjectUpdate: {
             /** Order */
             order: string[];
-            /** Excluded */
-            excluded: string[];
+            /** Skipped */
+            skipped: string[];
             settings: components["schemas"]["ExportSettings"];
         };
         /** ScoredEllipse */

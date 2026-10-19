@@ -118,3 +118,39 @@ export function clampView(
     y: axis(view.y, h * view.scale, vh),
   };
 }
+
+/**
+ * Corners of the aligned video frame in the photo: the square of half side `extent` circle
+ * radii around the circle, mapped back through the ellipse (see `warp_matrix` in render.py).
+ */
+export function cropCorners(e: Ellipse, extent: number): Point[] {
+  const { u, v } = axes(e);
+  const corners: [number, number][] = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ];
+  return corners.map(([x, y]) => {
+    const s = e.a * (x * u.x + y * u.y);
+    const t = e.b * (x * v.x + y * v.y);
+    return {
+      x: e.cx + extent * (s * u.x + t * v.x),
+      y: e.cy + extent * (s * u.y + t * v.y),
+    };
+  });
+}
+
+/** Largest crop extent whose frame lies inside a (w, h) photo (`max_extent` in render.py). */
+export function maxExtent(e: Ellipse, w: number, h: number): number {
+  const bounds: number[] = [];
+  for (const c of cropCorners(e, 1)) {
+    const dx = c.x - e.cx;
+    const dy = c.y - e.cy;
+    if (dx > 0) bounds.push((w - e.cx) / dx);
+    if (dx < 0) bounds.push(-e.cx / dx);
+    if (dy > 0) bounds.push((h - e.cy) / dy);
+    if (dy < 0) bounds.push(-e.cy / dy);
+  }
+  return Math.max(0, Math.min(...bounds));
+}

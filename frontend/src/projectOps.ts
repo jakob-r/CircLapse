@@ -1,6 +1,6 @@
 import type { PhotoInfo } from "./api";
 
-/** Pure edits of the frame order and the excluded set. */
+/** Pure edits of the frame order and the skipped set. */
 
 /** Move the item at `from` so that it ends up in front of the item that was at `to`
  * (`to === list.length` moves it to the end). */
@@ -28,7 +28,7 @@ export function sortByDate(order: string[], photos: PhotoInfo[]): string[] {
   });
 }
 
-export function setExcluded(excluded: string[], name: string, on: boolean): string[] {
-  const rest = excluded.filter((n) => n !== name);
+export function setSkipped(skipped: string[], name: string, on: boolean): string[] {
+  const rest = skipped.filter((n) => n !== name);
   return on ? [...rest, name] : rest;
 }

@@ -5,18 +5,18 @@ import { imageRoute } from "../routes";
 /** Plays the aligned previews of all frames at the export frame rate. */
 export function Player({
   project,
-  onExclude,
+  onSkip,
   onClose,
 }: {
   project: ProjectInfo;
-  onExclude: (name: string) => void;
+  onSkip: (name: string) => void;
   onClose: () => void;
 }) {
   const frames = useMemo(() => {
-    const excluded = new Set(project.excluded);
+    const skipped = new Set(project.skipped);
     const byName = new Map(project.photos.map((p) => [p.name, p]));
     return project.order
-      .filter((n) => !excluded.has(n))
+      .filter((n) => !skipped.has(n))
       .map((n) => byName.get(n))
       .filter((p) => p !== undefined && p.usable && !p.dropped && p.preview !== null)
       .map((p) => ({ name: p!.name, src: p!.preview! }));
@@ -100,10 +100,10 @@ export function Player({
               <button
                 onClick={() => {
                   setPlaying(false);
-                  onExclude(current.name);
+                  onSkip(current.name);
                 }}
               >
-                Remove frame
+                Skip frame
               </button>
             </>
           )}

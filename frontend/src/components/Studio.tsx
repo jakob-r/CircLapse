@@ -11,7 +11,7 @@ import {
   type ProjectUpdate,
   type SortBy,
 } from "../api";
-import { moveItem, setExcluded, sortByDate } from "../projectOps";
+import { moveItem, setSkipped, sortByDate } from "../projectOps";
 import { imageRoute } from "../routes";
 import { ExportDialog } from "./ExportDialog";
 import { Player } from "./Player";
@@ -20,15 +20,18 @@ import { ThumbImage } from "./ThumbImage";
 type View = "photos" | "aligned";
 const VIEW_KEY = "circlapse.studio.view";
 
+/** The grid view last chosen in the studio; the editor shows the crop when it is "aligned". */
+export function storedView(): View {
+  try {
+    return sessionStorage.getItem(VIEW_KEY) === "aligned" ? "aligned" : "photos";
+  } catch {
+    return "photos";
+  }
+}
+
 /** The grid view survives trips to the editor (which unmount the studio). */
 function useView(): [View, (v: View) => void] {
-  const [view, setView] = useState<View>(() => {
-    try {
-      return sessionStorage.getItem(VIEW_KEY) === "aligned" ? "aligned" : "photos";
-    } catch {
-      return "photos";
-    }
-  });
+  const [view, setView] = useState<View>(storedView);
   const set = (v: View) => {
     setView(v);
     try {
@@ -53,7 +56,7 @@ export function useProjectUpdate() {
       if (!current) return;
       const next = fn({
         order: current.order,
-        excluded: current.excluded,
+        skipped: current.skipped,
         settings: current.settings,
       });
       queryClient.setQueryData<ProjectInfo>(["project"], { ...current, ...next });
@@ -86,7 +89,7 @@ function Tile({
   view,
   index,
   dropTarget,
-  onExclude,
+  onSkip,
   onDragStart,
   onDragOver,
 }: {
@@ -95,16 +98,16 @@ function Tile({
   view: View;
   index: number | null;
   dropTarget: boolean;
-  onExclude: (on: boolean) => void;
+  onSkip: (on: boolean) => void;
   onDragStart?: () => void;
   onDragOver?: (e: DragEvent) => void;
 }) {
-  const excluded = index === null;
-  const classes = ["tile", excluded && "excluded", dropTarget && "drop-before"];
+  const skipped = index === null;
+  const classes = ["tile", skipped && "skipped", dropTarget && "drop-before"];
   return (
     <div
       className={classes.filter(Boolean).join(" ")}
-      draggable={!excluded}
+      draggable={!skipped}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", photo.name);
@@ -134,10 +137,10 @@ function Tile({
             cropped out
           </span>
         )}
-        {excluded ? (
-          <button onClick={() => onExclude(false)}>Restore</button>
+        {skipped ? (
+          <button onClick={() => onSkip(false)}>Restore</button>
         ) : (
-          <button className="icon" title="Remove from the video" onClick={() => onExclude(true)}>
+          <button className="icon" title="Skip this photo" onClick={() => onSkip(true)}>
             ✕
           </button>
         )}
@@ -168,13 +171,13 @@ export function Studio() {
   const p = project.data;
   const infos = new Map((images.data ?? []).map((i) => [i.name, i]));
   const photos = new Map(p.photos.map((ph) => [ph.name, ph]));
-  const excludedSet = new Set(p.excluded);
-  const included = p.order.filter((n) => !excludedSet.has(n));
+  const skippedSet = new Set(p.skipped);
+  const included = p.order.filter((n) => !skippedSet.has(n));
   const dropped = p.photos.filter((ph) => ph.dropped).length;
   const unusable = included.filter((n) => !photos.get(n)?.usable).length;
 
-  const exclude = (name: string, on: boolean) =>
-    update((u) => ({ ...u, excluded: setExcluded(u.excluded, name, on) }));
+  const skip = (name: string, on: boolean) =>
+    update((u) => ({ ...u, skipped: setSkipped(u.skipped, name, on) }));
 
   const sortBySimilarity = async (by: SortBy) => {
     setSorting(by);
@@ -215,7 +218,7 @@ export function Studio() {
           <h1>{p.name}</h1>
           <span className="meta">
             {p.frames} frames
-            {p.excluded.length > 0 && ` · ${p.excluded.length} removed`}
+            {p.skipped.length > 0 && ` · ${p.skipped.length} skipped`}
             {dropped > 0 && ` · ${dropped} cropped out`}
             {unusable > 0 && ` · ${unusable} without circle`}
             {p.extent !== null && ` · circle fills ${Math.round(100 / p.extent)}% of the frame`}
@@ -285,12 +288,12 @@ export function Studio() {
       {error && <div className="message error">Saving failed: {error}</div>}
       {sortError && <div className="message error">Sorting failed: {sortError}</div>}
       <p className="hint">
-        Drag photos to reorder, ✕ removes one from the video, click a photo to correct its
+        Drag photos to reorder, ✕ skips one, click a photo to correct its
         ellipse.
       </p>
 
       {included.length === 0 ? (
-        <div className="message">All photos are removed.</div>
+        <div className="message">All photos are skipped.</div>
       ) : (
         <div
           className="grid studio-grid"
@@ -315,7 +318,7 @@ export function Studio() {
                 view={view}
                 index={i}
                 dropTarget={dropIndex === i && dragged !== name}
-                onExclude={(on) => exclude(name, on)}
+                onSkip={(on) => skip(name, on)}
                 onDragStart={() => setDragged(name)}
                 onDragOver={over(i)}
               />
@@ -333,11 +336,11 @@ export function Studio() {
         </div>
       )}
 
-      {p.excluded.length > 0 && (
-        <section className="excluded">
-          <h2>Removed ({p.excluded.length})</h2>
+      {p.skipped.length > 0 && (
+        <section className="skipped">
+          <h2>Skipped ({p.skipped.length})</h2>
           <div className="grid studio-grid small">
-            {p.excluded.map((name) => {
+            {p.skipped.map((name) => {
               const photo = photos.get(name);
               if (!photo) return null;
               return (
@@ -348,7 +351,7 @@ export function Studio() {
                   view={view}
                   index={null}
                   dropTarget={false}
-                  onExclude={(on) => exclude(name, on)}
+                  onSkip={(on) => skip(name, on)}
                 />
               );
             })}
@@ -359,7 +362,7 @@ export function Studio() {
       {playing && (
         <Player
           project={p}
-          onExclude={(name) => exclude(name, true)}
+          onSkip={(name) => skip(name, true)}
           onClose={() => setPlaying(false)}
         />
       )}

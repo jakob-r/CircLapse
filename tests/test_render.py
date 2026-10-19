@@ -50,11 +50,13 @@ def test_max_extent_frame_lies_inside_photo():
     )
 
 
-def test_choose_extent_keep_and_caps():
-    cfg = RenderConfig(keep=1.0, max_extent=3.0, min_extent=1.0)
+def test_choose_extent_keep_and_zoom():
+    cfg = RenderConfig(keep=1.0, min_extent=1.0)
     assert choose_extent([2.0, 1.5, 0.8], cfg) == 1.5  # 0.8 can't show the whole circle
     assert choose_extent([2.5, 2.0, 1.2, 4.0], RenderConfig(keep=0.75)) == 2.0
-    assert choose_extent([5.0, 4.0], cfg) == 3.0
+    assert choose_extent([5.0, 4.0], cfg) == 4.0
+    assert choose_extent([2.0, 3.0], RenderConfig(zoom=1.25)) == 1.6
+    assert choose_extent([2.0, 3.0], RenderConfig(zoom=4)) == 1.0  # circle stays fully visible
     with pytest.raises(ValueError):
         choose_extent([0.5], cfg)
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PhotoInfo } from "./api";
-import { moveItem, setExcluded, sortByDate } from "./projectOps";
+import { moveItem, setSkipped, sortByDate } from "./projectOps";
 
 const photo = (name: string, time: string | null): PhotoInfo => ({
   name,
@@ -30,7 +30,7 @@ describe("projectOps", () => {
   });
 
   it("toggles exclusion", () => {
-    expect(setExcluded(["a"], "b", true)).toEqual(["a", "b"]);
-    expect(setExcluded(["a", "b"], "a", false)).toEqual(["b"]);
+    expect(setSkipped(["a"], "b", true)).toEqual(["a", "b"]);
+    expect(setSkipped(["a", "b"], "a", false)).toEqual(["b"]);
   });
 });

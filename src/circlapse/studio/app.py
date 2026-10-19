@@ -24,6 +24,7 @@ from circlapse.studio.project import (
     EXPORT_DIR,
     ExportSettings,
     Project,
+    adopt_label_skips,
     load_project,
     save_project,
     sync,
@@ -49,7 +50,7 @@ class ProjectInfo(BaseModel):
     name: str
     path: str
     order: list[str]
-    excluded: list[str]
+    skipped: list[str]
     settings: ExportSettings
     # Common crop as frame half side in circle radii; None when no photo can be a frame
     extent: float | None
@@ -59,7 +60,7 @@ class ProjectInfo(BaseModel):
 
 class ProjectUpdate(BaseModel):
     order: list[str]
-    excluded: list[str]
+    skipped: list[str]
     settings: ExportSettings
 
 
@@ -84,9 +85,9 @@ def _preview_key(e: Ellipse, extent: float, size: int, graded: bool) -> str:
 def create_studio_app(project_dir: Path) -> FastAPI:
     project_dir = project_dir.resolve()
     project = load_project(project_dir)
-    if sync(project, project_dir):
-        save_project(project_dir, project)
     dataset = Dataset(project_dir)
+    if sync(project, project_dir) | adopt_label_skips(project, dataset):
+        save_project(project_dir, project)
     store = ImageStore(dataset)
     export_dir = project_dir / EXPORT_DIR
     status = ExportStatus(directory=str(export_dir))
@@ -116,11 +117,11 @@ def create_studio_app(project_dir: Path) -> FastAPI:
         if extent is not None:
             return extent
         own = Frame(name, e, shapes()[name]).max_extent
-        return max(1.0, min(own, project.settings.max_extent))
+        return max(1.0, min(own, 3.0) / project.settings.zoom)
 
     def info() -> ProjectInfo:
         frames, dropped, extent = plan(project)
-        dropped_set, excluded = set(dropped), set(project.excluded)
+        dropped_set, skipped = set(dropped), set(project.skipped)
         photos = []
         for name in project.order:
             label = dataset.label(name)
@@ -136,7 +137,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
                     name=name,
                     time=project.times.get(name),
                     usable=usable,
-                    dropped=usable and name in dropped_set and name not in excluded,
+                    dropped=usable and name in dropped_set and name not in skipped,
                     preview=preview,
                 )
             )
@@ -144,7 +145,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
             name=project.name,
             path=str(project_dir),
             order=project.order,
-            excluded=project.excluded,
+            skipped=project.skipped,
             settings=project.settings,
             extent=extent,
             frames=len(frames),
@@ -153,7 +154,7 @@ def create_studio_app(project_dir: Path) -> FastAPI:
 
     @app.get("/api/project")
     def get_project() -> ProjectInfo:
-        if sync(project, project_dir):
+        if sync(project, project_dir) | adopt_label_skips(project, dataset):
             save_project(project_dir, project)
         return info()
 
@@ -161,10 +162,10 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     def put_project(update: ProjectUpdate) -> ProjectInfo:
         if sorted(update.order) != sorted(project.order):
             raise HTTPException(422, "order must contain every photo of the project exactly once")
-        if not set(update.excluded) <= set(project.order):
-            raise HTTPException(422, "excluded photos must be part of the project")
+        if not set(update.skipped) <= set(project.order):
+            raise HTTPException(422, "skipped photos must be part of the project")
         project.order = update.order
-        project.excluded = [n for n in update.order if n in set(update.excluded)]
+        project.skipped = [n for n in update.order if n in set(update.skipped)]
         project.settings = update.settings
         save_project(project_dir, project)
         return info()

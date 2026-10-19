@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   contains,
+  cropCorners,
   fitView,
   handles,
+  maxExtent,
   moveMajor,
   moveMinor,
   normalize,
@@ -73,5 +75,42 @@ describe("view", () => {
     const after = { x: (50 - z.x) / z.scale, y: (60 - z.y) / z.scale };
     expect(after.x).toBeCloseTo(before.x);
     expect(after.y).toBeCloseTo(before.y);
+  });
+});
+
+describe("cropCorners", () => {
+  it("is the square of half side extent * radius for a circle", () => {
+    const c = cropCorners({ cx: 100, cy: 50, a: 10, b: 10, angle_deg: 30 }, 2);
+    expect(c[0]!.x).toBeCloseTo(80);
+    expect(c[0]!.y).toBeCloseTo(30);
+    expect(c[2]!.x).toBeCloseTo(120);
+    expect(c[2]!.y).toBeCloseTo(70);
+  });
+
+  it("stretches along the ellipse axes", () => {
+    // a axis vertical: the frame is 2a tall and 2b wide at extent 1
+    const c = cropCorners(e, 1);
+    expect(Math.abs(c[2]!.x - c[0]!.x)).toBeCloseTo(40);
+    expect(Math.abs(c[2]!.y - c[0]!.y)).toBeCloseTo(80);
+  });
+});
+
+describe("maxExtent", () => {
+  it("is limited by the nearest border", () => {
+    // circle of radius 10 at (30, 50) in a 200x100 photo: left border 30 away
+    expect(maxExtent({ cx: 30, cy: 50, a: 10, b: 10, angle_deg: 0 }, 200, 100)).toBeCloseTo(3);
+  });
+
+  it("puts a frame corner on the border", () => {
+    const s = maxExtent(e, 200, 100);
+    const c = cropCorners(e, s);
+    const touches = c.some(
+      (p) =>
+        Math.abs(p.x) < 1e-6 ||
+        Math.abs(p.y) < 1e-6 ||
+        Math.abs(p.x - 200) < 1e-6 ||
+        Math.abs(p.y - 100) < 1e-6,
+    );
+    expect(touches).toBe(true);
   });
 });

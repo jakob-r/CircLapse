@@ -1,3 +1,4 @@
+import json
 import shutil
 import time
 from datetime import datetime, timedelta
@@ -7,9 +8,9 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from circlapse.labels import ScoredEllipse, load_labels
+from circlapse.labels import ScoredEllipse, load_labels, save_labels
 from circlapse.studio.app import create_studio_app
-from circlapse.studio.project import create_project, is_project, load_project
+from circlapse.studio.project import create_project, is_project, load_project, save_project
 
 T0 = datetime(2025, 7, 19, 9, 0)
 
@@ -60,7 +61,7 @@ def test_create_project_copies_candidates_in_date_order(project):
     assert labels["undated.jpg"].prominent_ellipse.score == 0.9
 
 
-def test_project_api_reorder_and_exclude(project):
+def test_project_api_reorder_and_skip(project):
     _, proj = project
     c = TestClient(create_studio_app(proj))
     info = c.get("/api/project").json()
@@ -69,14 +70,54 @@ def test_project_api_reorder_and_exclude(project):
     order = list(reversed(info["order"]))
     r = c.put(
         "/api/project",
-        json={"order": order, "excluded": [order[0]], "settings": info["settings"]},
+        json={"order": order, "skipped": [order[0]], "settings": info["settings"]},
     )
     assert r.status_code == 200
     assert r.json()["frames"] == 2
     assert load_project(proj).order == order
     assert [i["name"] for i in c.get("/api/images").json()] == order
-    bad = {"order": order[:2], "excluded": [], "settings": info["settings"]}
+    bad = {"order": order[:2], "skipped": [], "settings": info["settings"]}
     assert c.put("/api/project", json=bad).status_code == 422
+
+
+def test_label_skip_moves_to_the_project(project):
+    _, proj = project
+    labels = load_labels(proj / "labels.json")
+    labels["undated.jpg"] = labels["undated.jpg"].model_copy(update={"status": "skip"})
+    save_labels(proj / "labels.json", labels)
+    info = TestClient(create_studio_app(proj)).get("/api/project").json()
+    assert info["skipped"] == ["undated.jpg"]
+    photo = next(ph for ph in info["photos"] if ph["name"] == "undated.jpg")
+    assert photo["usable"]
+    assert load_labels(proj / "labels.json")["undated.jpg"].status == "labeled"
+    assert load_project(proj).skipped == ["undated.jpg"]
+
+
+def test_skipped_photos_do_not_limit_the_crop(project):
+    _, proj = project
+    labels = load_labels(proj / "labels.json")
+    near_border = ScoredEllipse(cx=35, cy=60, a=30, b=28, angle_deg=10, score=0.9)
+    labels["undated.jpg"] = labels["undated.jpg"].model_copy(update={"ellipses": [near_border]})
+    save_labels(proj / "labels.json", labels)
+    c = TestClient(create_studio_app(proj))
+    info = c.get("/api/project").json()
+    update = {"order": info["order"], "skipped": ["undated.jpg"], "settings": info["settings"]}
+    skipped = c.put("/api/project", json=update).json()
+    assert skipped["extent"] > info["extent"]
+    assert skipped["frames"] == info["frames"] - 1
+
+
+def test_reads_older_project_files_with_excluded(project):
+    _, proj = project
+    data = json.loads((proj / "project.json").read_text())
+    del data["skipped"]
+    data["excluded"] = [data["order"][0]]
+    (proj / "project.json").write_text(json.dumps(data))
+    assert load_project(proj).skipped == [data["order"][0]]
+    save_project(proj, load_project(proj))
+    saved = json.loads((proj / "project.json").read_text())
+    assert saved["skipped"] == [data["order"][0]]
+    assert "excluded" not in saved
 
 
 def test_project_picks_up_new_and_deleted_files(project):

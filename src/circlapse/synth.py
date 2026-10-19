@@ -242,14 +242,16 @@ def _draw_prominent(
         _draw(img, e, color)
         return [e]
     if style == "outline":
-        thickness = max(1, int(e.b * rng.uniform(0.01, 0.12)))
+        # mostly thin strokes, sometimes thick bands (tires, housings) up to 30% of the radius
+        frac = rng.uniform(0.01, 0.12) if rng.random() < 0.6 else rng.uniform(0.12, 0.3)
+        thickness = max(1, int(e.b * frac))
         # the drawn stroke is centered on the rim; shift so the outer edge matches the label
         h = thickness / 2
         stroke = Ellipse(cx=e.cx, cy=e.cy, a=e.a - h, b=max(e.b - h, 1.0), angle_deg=e.angle_deg)
         _draw(img, stroke, color, thickness)
-        if thickness < 0.04 * e.b:
-            return [e]
-        # a thick stroke has a second rim, a sister an annotator might pick as well
+        if thickness < 0.04 * e.b or thickness > 0.12 * e.b:
+            return [e]  # thin: one rim; a thick band is labeled at its outer rim only
+        # a medium stroke has a second rim, a sister an annotator might pick as well
         t = thickness
         return [e, Ellipse(cx=e.cx, cy=e.cy, a=e.a - t, b=e.b - t, angle_deg=e.angle_deg)]
     return _draw_rings(rng, img, e, bg)  # type: ignore[arg-type]

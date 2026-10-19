@@ -5,7 +5,7 @@ Every photo is mapped by an affine transform that turns its prominent ellipse in
 the center of a square frame. All frames share one crop extent ``s``: the frame's half side
 measured in circle radii. ``s`` is the largest value for which the frame stays inside every
 kept photo, so no frame shows empty borders. Photos that would force a much tighter crop can
-be dropped with ``keep``.
+be dropped with ``keep``, and ``zoom`` crops tighter than that.
 """
 
 from __future__ import annotations
@@ -35,8 +35,9 @@ class RenderConfig:
     # Fraction of photos that must survive the common crop; the rest (those whose circle is
     # closest to the photo border) are dropped to allow a wider crop
     keep: float = 1.0
-    # Upper bound for the crop extent: the circle diameter is at least 1/max_extent of the frame
-    max_extent: float = 3.0
+    # Extra zoom on top of the widest crop that works for all kept photos: the crop extent is
+    # divided by it (never below ``min_extent``), so 1 keeps the minimal alignment crop
+    zoom: float = 1.0
     # Photos whose circle does not fit this many radii into the photo are always dropped
     min_extent: float = 1.0
     grade: bool = True
@@ -77,12 +78,13 @@ def max_extent(e: Ellipse, shape: tuple[int, ...]) -> float:
 
 
 def choose_extent(extents: Iterable[float], cfg: RenderConfig) -> float:
-    """Common crop extent so that a fraction ``cfg.keep`` of the photos fits."""
+    """Common crop extent: the widest that fits a fraction ``cfg.keep`` of the photos, zoomed in
+    by ``cfg.zoom`` but never tighter than ``cfg.min_extent``."""
     ok = sorted((s for s in extents if s >= cfg.min_extent), reverse=True)
     if not ok:
         raise ValueError(f"no photo leaves room for a crop of {cfg.min_extent} circle radii")
     n = max(1, math.ceil(cfg.keep * len(ok)))
-    return min(ok[n - 1], cfg.max_extent)
+    return max(cfg.min_extent, ok[n - 1] / cfg.zoom)
 
 
 def warp_matrix(e: Ellipse, extent: float, size: int) -> np.ndarray:

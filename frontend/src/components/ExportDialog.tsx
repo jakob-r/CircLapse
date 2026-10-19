@@ -115,20 +115,20 @@ export function ExportDialog({
             />
             <span>{Math.round(settings.keep * 100)}%</span>
           </div>
-          <label htmlFor="extent" title="Upper limit for how much surrounding is shown">
-            Widest crop
+          <label htmlFor="zoom" title="Crop tighter than the widest crop that fits all kept photos">
+            Zoom in
           </label>
           <div className="range">
             <input
-              id="extent"
+              id="zoom"
               type="range"
-              min={1.2}
-              max={6}
-              step={0.1}
-              value={settings.max_extent}
-              onChange={(e) => change({ max_extent: Number(e.target.value) })}
+              min={1}
+              max={3}
+              step={0.05}
+              value={settings.zoom}
+              onChange={(e) => change({ zoom: Number(e.target.value) })}
             />
-            <span>{settings.max_extent.toFixed(1)}× radius</span>
+            <span>{settings.zoom === 1 ? "none" : `${settings.zoom.toFixed(2)}×`}</span>
           </div>
           <span>Color</span>
           <label>
