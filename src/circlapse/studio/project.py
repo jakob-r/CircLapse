@@ -136,10 +136,15 @@ def adopt_label_skips(project: Project, dataset: Dataset) -> bool:
     return changed
 
 
-def _stage(source: Path, work: Path, log: Callable[[str], None]) -> None:
-    """Make ``work`` hold every photo of ``source``: images are linked, camera RAW files are
-    converted to JPEG. A RAW file is skipped when a JPEG of the same name is already there."""
-    files = sorted(p for p in source.iterdir() if p.is_file() and not p.name.startswith("."))
+def _stage(
+    source: Path, work: Path, log: Callable[[str], None], files: list[Path] | None = None
+) -> None:
+    """Make ``work`` hold every photo of ``source`` (or just ``files``): images are linked,
+    camera RAW files are converted to JPEG. A RAW file is skipped when a JPEG of the same name
+    is already there."""
+    if files is None:
+        files = [p for p in source.iterdir() if p.is_file() and not p.name.startswith(".")]
+    files = sorted(files, key=lambda p: p.name)
     jpeg_stems = {p.stem.lower() for p in files if p.suffix.lower() in JPEG_SUFFIXES}
     for p in files:
         if is_raw(p):
@@ -161,16 +166,17 @@ def create_project(
     detector: Detector,
     fallback: dict[str, Photo] | None = None,
     log: Callable[[str], None] = print,
+    files: list[Path] | None = None,
 ) -> Project:
-    """Detect ellipses in the photos directly in ``source`` and copy those with one into
-    ``directory``, which becomes a project sorted by capture time."""
+    """Detect ellipses in the photos directly in ``source`` (or only in ``files``) and copy
+    those with one into ``directory``, which becomes a project sorted by capture time."""
     directory.mkdir(parents=True, exist_ok=True)
     labels: dict[str, ImageLabel] = {}
     times: dict[str, datetime | None] = {}
     skipped = []
     with tempfile.TemporaryDirectory(prefix=".staging-", dir=directory) as staging:
         work = Path(staging)
-        _stage(source, work, log)
+        _stage(source, work, log, files)
         photos = detect_all(work, detector, log=log, fallback=fallback)
         for photo in photos:
             if not photo.label.ellipses:

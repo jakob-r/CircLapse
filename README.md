@@ -26,6 +26,18 @@ encodes the sequence as mp4, webm or gif.
 ## Make a circlapse
 
 ```bash
+make studio
+```
+
+opens the studio on a start page: choose or drop a folder (or single photos), import a date
+range from Apple Photos, or reopen a recent project. With the `app` extra the studio runs in its
+own window, which can pick and take dropped folders; without it, it opens in your browser and you
+type the folder's path. Photos from Apple Photos and dropped photos go to `~/Pictures/circlapse/`
+(`--library`).
+
+From the command line:
+
+```bash
 circlapse make ~/Pictures/circles
 ```
 
@@ -40,7 +52,7 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
    Your originals are never changed; photos without a circle are not copied.
    Camera RAW files (ARW, CR2, CR3, NEF, RAF, DNG, ORF, RW2) are converted to JPEG on the way in,
    keeping capture time and GPS. A RAW file is skipped when a JPEG of the same name is in the folder.
-2. The studio opens in your browser:
+2. The studio opens:
    - drag photos to reorder them, or sort them with **Sort…** by date (the original order),
      color (inside the circle, outside or the whole frame), shape or meaning (a DINOv2
      embedding); all but date compare the aligned, cropped frames and can loop,
@@ -52,7 +64,7 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
 3. Videos are written to `<folder>/circlapse/export/` and can be downloaded from the dialog.
 
 Run `circlapse make` on the same folder again to reopen the project, or `circlapse studio
-<project folder>` to open any project. Everything is stored in the project folder:
+<project folder>` to open any project (`circlapse studio` alone shows the start page). Everything is stored in the project folder:
 the photos, `labels.json` with the ellipses and `project.json` with order, skipped photos and
 export settings.
 
@@ -64,12 +76,13 @@ Requirements: Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js (to build 
 ```bash
 git clone git@github.com:jakob-r/CircLapse.git
 cd CircLapse
-uv sync --extra ml          # add --extra photos for Apple Photos, --extra geo for place names
-make build                  # build the browser UI
-uv run --extra ml circlapse make ~/Pictures/circles
+uv sync --extra ml --extra app  # app: native window; --extra photos for Apple Photos,
+                                #   --extra geo for place names
+make build                      # build the UI
+uv run --extra ml --extra app circlapse studio
 ```
 
-Or simply `make studio DATA=~/Pictures/circles`.
+Or simply `make studio` (`make studio DATA=~/Pictures/circles` skips the start page).
 
 **Model:** detection needs a trained checkpoint at `checkpoints/finetune.pt` (or pass
 `--checkpoint`). Checkpoints are not part of the repository; train one as described below.

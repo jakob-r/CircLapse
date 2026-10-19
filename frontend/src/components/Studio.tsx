@@ -1,8 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import {
+  closeProject,
   saveProject,
   useImages,
+  useLauncher,
   useProject,
   type ImageInfo,
   type PhotoInfo,
@@ -171,7 +173,9 @@ function Tile({
 }
 
 export function Studio() {
+  const queryClient = useQueryClient();
   const project = useProject();
+  const launcher = useLauncher();
   const images = useImages();
   const { update, error } = useProjectUpdate();
   const [view, setView] = useView();
@@ -220,6 +224,21 @@ export function Studio() {
   return (
     <div className="studio">
       <header>
+        {launcher.data && (
+          <button
+            className="icon"
+            title="Back to the start page"
+            onClick={() =>
+              void closeProject().then((l) => {
+                queryClient.setQueryData(["launcher"], l);
+                queryClient.removeQueries({ queryKey: ["project"] });
+                queryClient.removeQueries({ queryKey: ["images"] });
+              })
+            }
+          >
+            ‹
+          </button>
+        )}
         <div className="studio-title">
           <h1>{p.name}</h1>
           <span className="meta">

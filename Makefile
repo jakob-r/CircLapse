@@ -38,8 +38,9 @@ frontend/dist/index.html: frontend/node_modules $(FRONTEND_SRC)
 
 build: frontend/dist/index.html ## Build the annotator UI
 
-studio: build ## Make a circlapse of DATA: detect, review in the browser and export (DATA/circlapse/)
-	uv run --extra ml circlapse make $(DATA)
+studio: build ## Open the studio: import a folder or Apple Photos, review and export (DATA=... skips the start page)
+	uv run --extra ml --extra photos --extra app circlapse \
+		$(if $(filter command line,$(origin DATA)),make $(DATA),studio)
 
 annotate: build ## Annotate images in DATA on http://127.0.0.1:8000 (PRED=predictions.json to overlay)
 	uv run circlapse annotate $(DATA) $(if $(PRED),--pred $(PRED))
@@ -84,10 +85,10 @@ eval: ## Evaluate data/predictions/NAME.json against DATA labels
 
 api-types: ## Regenerate frontend/src/api-types.ts from the FastAPI schema
 	uv run python -c "import json, tempfile, pathlib; \
-		from circlapse.studio.app import create_studio_app; \
+		from circlapse.studio.launcher import openapi_schema; \
 		from circlapse.studio.project import Project, save_project; \
 		d = pathlib.Path(tempfile.mkdtemp()); save_project(d, Project()); \
-		print(json.dumps(create_studio_app(d).openapi(), indent=2))" \
+		print(json.dumps(openapi_schema(d), indent=2))" \
 		> frontend/openapi.json
 	cd frontend && npm run api-types
 

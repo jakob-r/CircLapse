@@ -57,6 +57,10 @@ def make(
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option()] = 8000,
     open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
+    window: Annotated[
+        bool | None,
+        typer.Option("--window/--browser", help="Native window [default: if the app extra is]"),
+    ] = None,
 ) -> None:
     """Make a circlapse: detect circles, copy the candidates into a project and open the studio.
 
@@ -87,37 +91,85 @@ def make(
         detector = NNDetector(checkpoint, min_confidence=min_confidence)
         created = create_project(data, project, detector, fallback, log=_log)
         typer.echo(f"copied {len(created.order)} photos with a circle to {project}")
-    _serve_studio(project, host, port, open_browser)
+    _serve_studio(project, host, port, open_browser, checkpoint, min_confidence, window)
 
 
 @app.command()
 def studio(
-    project: Annotated[Path, typer.Argument(help="Project folder made by `circlapse make`")],
+    project: Annotated[
+        Path | None, typer.Argument(help="Project folder [default: the start page]")
+    ] = None,
+    library: Annotated[
+        Path, typer.Option(help="Where photos from Apple Photos and dropped photos go")
+    ] = Path("~/Pictures/circlapse"),
+    checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
+    min_confidence: Annotated[
+        float, typer.Option(help="Photos below this detector confidence are not copied")
+    ] = 0.5,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option()] = 8000,
     open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
+    window: Annotated[
+        bool | None,
+        typer.Option("--window/--browser", help="Native window [default: if the app extra is]"),
+    ] = None,
 ) -> None:
-    """Open the studio of an existing project."""
+    """Open the studio: a start page to import photos from a folder, dropped photos or Apple
+    Photos, or reopen a recent project; or open PROJECT directly.
+
+    Importing needs the ml extra, Apple Photos the photos extra and Full Disk Access for the
+    terminal. The app extra (pywebview) shows the studio in a native window, which can pick
+    and take dropped folders.
+    """
     from circlapse.studio.project import is_project
 
-    if not is_project(project):
+    if project is not None and not is_project(project):
         raise typer.BadParameter(f"{project} is not a project, create one with `circlapse make`")
-    _serve_studio(project, host, port, open_browser)
+    _serve_studio(project, host, port, open_browser, checkpoint, min_confidence, window, library)
 
 
-def _serve_studio(project: Path, host: str, port: int, open_browser: bool) -> None:
+def _serve_studio(
+    project: Path | None,
+    host: str,
+    port: int,
+    open_browser: bool,
+    checkpoint: Path,
+    min_confidence: float,
+    window: bool | None,
+    library: Path = Path("~/Pictures/circlapse"),
+) -> None:
     import threading
     import webbrowser
 
     import uvicorn
 
-    from circlapse.studio.app import create_studio_app
+    from circlapse.detect.base import Detector
+    from circlapse.studio import window as native
+    from circlapse.studio.launcher import Launcher
 
+    checkpoint = checkpoint.resolve()
+
+    def detector() -> Detector:
+        try:
+            from circlapse.detect.nn import NNDetector
+        except ImportError as e:
+            raise RuntimeError("install the ml extra: uv sync --extra ml") from e
+        return NNDetector(checkpoint, min_confidence=min_confidence)
+
+    app = Launcher(detector, library=library, project=project)
+    if window is None:
+        window = native.available()
+    elif window and not native.available():
+        raise typer.BadParameter("install the app extra: uv sync --extra app")
+    if window:
+        typer.echo("studio in a window (close it to stop)")
+        native.serve_window(app, host, port)
+        return
     url = f"http://{host}:{port}"
     typer.echo(f"studio on {url} (ctrl+c to stop)")
     if open_browser:
         threading.Timer(1.0, webbrowser.open, [url]).start()
-    uvicorn.run(create_studio_app(project), host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 @app.command()

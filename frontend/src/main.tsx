@@ -8,6 +8,13 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
+// Files dropped from outside would replace the page; the start page imports them instead
+for (const type of ["dragover", "drop"]) {
+  window.addEventListener(type, (e) => {
+    if ((e as DragEvent).dataTransfer?.types.includes("Files")) e.preventDefault();
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

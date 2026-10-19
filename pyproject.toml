@@ -23,6 +23,9 @@ circlapse = "circlapse.cli:app"
 geo = [
     "reverse-geocode>=1.6",
 ]
+app = [
+    "pywebview>=5.0",
+]
 photos = [
     "osxphotos>=0.70",
 ]
@@ -62,7 +65,7 @@ warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["cv2.*", "reverse_geocode", "osxphotos"]
+module = ["cv2.*", "reverse_geocode", "osxphotos", "webview", "webview.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

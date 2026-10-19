@@ -533,6 +533,150 @@
           }
         }
       }
+    },
+    "/api/launcher": {
+      "get": {
+        "summary": "Get Launcher",
+        "operationId": "get_launcher_api_launcher_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LauncherInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/launcher/open": {
+      "post": {
+        "summary": "Open Project",
+        "operationId": "open_project_api_launcher_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LauncherInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/launcher/close": {
+      "post": {
+        "summary": "Close Project",
+        "operationId": "close_project_api_launcher_close_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LauncherInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/launcher/import": {
+      "get": {
+        "summary": "Import Status",
+        "operationId": "import_status_api_launcher_import_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Start Import",
+        "operationId": "start_import_api_launcher_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Dismiss Import",
+        "operationId": "dismiss_import_api_launcher_import_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportStatus"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1077,6 +1221,191 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ImportRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "paths",
+              "apple_photos"
+            ],
+            "title": "Source"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Paths",
+            "default": []
+          },
+          "from_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Date"
+          },
+          "to_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "ImportRequest"
+      },
+      "ImportStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "running",
+              "done",
+              "error"
+            ],
+            "title": "State",
+            "default": "idle"
+          },
+          "step": {
+            "type": "string",
+            "title": "Step",
+            "default": ""
+          },
+          "done": {
+            "type": "integer",
+            "title": "Done",
+            "default": 0
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "log": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Log",
+            "default": []
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          }
+        },
+        "type": "object",
+        "title": "ImportStatus"
+      },
+      "LauncherInfo": {
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/RecentProject"
+            },
+            "type": "array",
+            "title": "Recent"
+          },
+          "apple_photos": {
+            "type": "boolean",
+            "title": "Apple Photos"
+          },
+          "library": {
+            "type": "string",
+            "title": "Library"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "recent",
+          "apple_photos",
+          "library"
+        ],
+        "title": "LauncherInfo"
+      },
+      "OpenRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "OpenRequest"
+      },
+      "RecentProject": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "photos": {
+            "type": "integer",
+            "title": "Photos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "photos"
+        ],
+        "title": "RecentProject"
       }
     }
   }

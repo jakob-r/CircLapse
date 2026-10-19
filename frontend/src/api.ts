@@ -24,6 +24,18 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Throws the error of a failed response, with FastAPI's `detail` as the message. */
+async function detail(res: Response): Promise<never> {
+  const text = await res.text();
+  let message = text;
+  try {
+    message = String((JSON.parse(text) as { detail?: unknown }).detail ?? text);
+  } catch {
+    // Not JSON, show it as it is
+  }
+  throw new Error(message);
+}
+
 function toLabel(l: Schemas["ImageLabel"] | null): Label | null {
   if (!l) return null;
   return {
@@ -121,16 +133,7 @@ export async function fetchSortedOrder(
 ): Promise<string[]> {
   const params = new URLSearchParams({ by, region, loop: String(loop) });
   const res = await fetch(`/api/sorted?${params}`);
-  if (!res.ok) {
-    const text = await res.text();
-    let detail = text;
-    try {
-      detail = String((JSON.parse(text) as { detail?: unknown }).detail ?? text);
-    } catch {
-      // Not JSON, show it as it is
-    }
-    throw new Error(detail);
-  }
+  if (!res.ok) return detail(res);
   return ((await res.json()) as Schemas["SortedOrder"]).order;
 }
 
@@ -152,3 +155,65 @@ export function useExportStatus() {
 }
 
 export const exportFileUrl = (name: string) => url("export/file", name);
+
+// ---------------------------------------------------------------- launcher
+
+export type LauncherInfo = Schemas["LauncherInfo"];
+export type ImportRequest = Schemas["ImportRequest"];
+export type ImportStatus = Schemas["ImportStatus"];
+
+async function post<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) return detail(res);
+  return (await res.json()) as T;
+}
+
+/** The start page state, or null when the server has no start page (plain annotator). */
+export function useLauncher() {
+  return useQuery({
+    queryKey: ["launcher"],
+    queryFn: async () => {
+      const res = await fetch("/api/launcher");
+      if (res.status === 404) return null;
+      return json<LauncherInfo>(res);
+    },
+  });
+}
+
+export const startImport = (request: ImportRequest) =>
+  post<ImportStatus>("/api/launcher/import", request);
+export const openProject = (path: string) => post<LauncherInfo>("/api/launcher/open", { path });
+export const closeProject = () => post<LauncherInfo>("/api/launcher/close");
+
+export async function dismissImport(): Promise<ImportStatus> {
+  return json<ImportStatus>(await fetch("/api/launcher/import", { method: "DELETE" }));
+}
+
+export function useImportStatus() {
+  return useQuery({
+    queryKey: ["import"],
+    queryFn: async () => json<ImportStatus>(await fetch("/api/launcher/import")),
+    refetchInterval: (q) => (q.state.data?.state === "running" ? 500 : false),
+  });
+}
+
+// ---------------------------------------------------------------- native window
+
+interface NativeApi {
+  pick_folder(): Promise<string | null>;
+}
+
+declare global {
+  interface Window {
+    pywebview?: { api: NativeApi };
+  }
+}
+
+/** The pywebview bridge, which appears shortly after load; null in a browser. */
+export function nativeApi(): NativeApi | null {
+  return window.pywebview?.api ?? null;
+}
