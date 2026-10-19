@@ -58,7 +58,7 @@ Training images should feature
 
 ## Thoughts
 
-- I have an old version in `./old_version` that uses opencv and edge detection but it did not work well.
+- I have an old version on the `v1` branch that uses opencv and edge detection but it did not work well.
 - I guess a version using neural networks would be better, but I didn't find a good architecture for ellipse detection.
 
 ## Output video

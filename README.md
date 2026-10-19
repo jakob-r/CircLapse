@@ -8,11 +8,11 @@ so that the ellipse becomes a centered circle, picks the widest crop that works 
 encodes the sequence as mp4, webm or gif (1080 × 1080, 10 fps by default).
 
 <p align="center">
-  <img src="old_version/examples/example_in/_DSC2623.JPG" alt="input1" width="80">
-  <img src="old_version/examples/example_in/_DSC2666.JPG" alt="input2" width="80">
-  <img src="old_version/examples/example_in/_DSC2667.JPG" alt="input3" width="80">
-  <img src="old_version/examples/example_in/_DSC2715.JPG" alt="input4" width="80"></br>
-  <img src="old_version/examples/example_out/all.gif" alt="Example output animation" width="400">
+  <img src="examples/example_in/_DSC2623.JPG" alt="input1" width="80">
+  <img src="examples/example_in/_DSC2666.JPG" alt="input2" width="80">
+  <img src="examples/example_in/_DSC2667.JPG" alt="input3" width="80">
+  <img src="examples/example_in/_DSC2715.JPG" alt="input4" width="80"></br>
+  <img src="examples/example_out/all.gif" alt="Example output animation" width="400">
 </p>
 
 ## Make a circlapse
@@ -96,4 +96,4 @@ does both in a tracked run folder and adds its scores to [RESULTS.md](RESULTS.md
 - `src/circlapse/` — Python package: `nn/` network and training, `detect/` detectors,
   `render.py` alignment and encoding, `studio/` the project workflow, `annotate/` the API
 - `frontend/` — React UI shared by the studio and the annotator
-- `old_version/` — the earlier OpenCV edge-detection approach, kept for reference
+- the earlier OpenCV edge-detection approach lives on the `v1` branch

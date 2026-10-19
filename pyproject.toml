@@ -47,7 +47,7 @@ packages = ["src/circlapse"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
-extend-exclude = ["old_version", "frontend"]
+extend-exclude = ["frontend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "NPY"]
