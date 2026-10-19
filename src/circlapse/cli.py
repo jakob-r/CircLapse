@@ -53,7 +53,7 @@ def make(
     checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
     min_confidence: Annotated[
         float, typer.Option(help="Photos below this detector confidence are not copied")
-    ] = 0.5,
+    ] = 0.81,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option()] = 8000,
     open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
@@ -105,7 +105,7 @@ def studio(
     checkpoint: Annotated[Path, typer.Option()] = CHECKPOINTS / "finetune.pt",
     min_confidence: Annotated[
         float, typer.Option(help="Photos below this detector confidence are not copied")
-    ] = 0.5,
+    ] = 0.81,
     host: Annotated[str, typer.Option()] = "127.0.0.1",
     port: Annotated[int, typer.Option()] = 8000,
     open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True,
@@ -149,14 +149,14 @@ def _serve_studio(
 
     checkpoint = checkpoint.resolve()
 
-    def detector() -> Detector:
+    def detector(confidence: float) -> Detector:
         try:
             from circlapse.detect.nn import NNDetector
         except ImportError as e:
             raise RuntimeError("install the ml extra: uv sync --extra ml") from e
-        return NNDetector(checkpoint, min_confidence=min_confidence)
+        return NNDetector(checkpoint, min_confidence=confidence)
 
-    app = Launcher(detector, library=library, project=project)
+    app = Launcher(detector, library=library, project=project, min_confidence=min_confidence)
     if window is None:
         window = native.available()
     elif window and not native.available():

@@ -94,6 +94,7 @@ export function Start({ launcher }: { launcher: LauncherInfo }) {
   const dragging = useFileDrag();
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState("");
+  const [confidence, setConfidence] = useState(launcher.min_confidence);
   // The last seven days
   const [fromDate, setFromDate] = useState(() => isoDay(new Date(Date.now() - 6 * 864e5)));
   const [toDate, setToDate] = useState(() => isoDay(new Date()));
@@ -117,7 +118,8 @@ export function Start({ launcher }: { launcher: LauncherInfo }) {
   const run = async (request: ImportRequest) => {
     setError(null);
     try {
-      queryClient.setQueryData(["import"], await startImport(request));
+      const withConfidence = { ...request, min_confidence: confidence };
+      queryClient.setQueryData(["import"], await startImport(withConfidence));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -250,6 +252,28 @@ export function Start({ launcher }: { launcher: LauncherInfo }) {
           )}
         </section>
       </div>
+
+      <section className="start-threshold">
+        <label
+          htmlFor="confidence"
+          title="Photos whose circle the detector is less sure about than this are not imported"
+        >
+          Minimum confidence
+        </label>
+        <div className="range">
+          <input
+            id="confidence"
+            type="range"
+            min={0}
+            max={0.99}
+            step={0.01}
+            value={confidence}
+            onChange={(e) => setConfidence(Number(e.target.value))}
+          />
+          <span>{confidence.toFixed(2)}</span>
+        </div>
+        <p className="hint">Lower keeps more photos, but more of them without a real circle.</p>
+      </section>
 
       {launcher.recent.length > 0 && (
         <section className="start-recent">

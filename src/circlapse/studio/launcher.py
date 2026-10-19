@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import shutil
 import threading
 from collections.abc import Callable
 from datetime import date
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.types import Receive, Scope, Send
 
 from circlapse.annotate.app import mount_frontend
@@ -32,6 +33,8 @@ PROJECT_DIR = "circlapse"
 RECENT_LIMIT = 12
 DEFAULT_LIBRARY = Path.home() / "Pictures" / "circlapse"
 DEFAULT_STATE = Path.home() / ".config" / "circlapse" / "studio.json"
+# Photos below this detector confidence are not imported
+MIN_CONFIDENCE = 0.81
 
 ExportRange = Callable[[Path, date, date, Callable[[str], None]], dict[str, Photo]]
 
@@ -43,6 +46,8 @@ class ImportRequest(BaseModel):
     # source "apple_photos": first and last day, inclusive
     from_date: date | None = None
     to_date: date | None = None
+    # Photos below this detector confidence are not copied [default: the launcher's]
+    min_confidence: float | None = Field(None, ge=0, le=1)
 
 
 class ImportStatus(BaseModel):
@@ -68,6 +73,7 @@ class LauncherInfo(BaseModel):
     recent: list[RecentProject]
     apple_photos: bool
     library: str
+    min_confidence: float
 
 
 class OpenRequest(BaseModel):
@@ -112,13 +118,15 @@ class Launcher:
 
     def __init__(
         self,
-        detector: Callable[[], Detector],
+        detector: Callable[[float], Detector],
         library: Path = DEFAULT_LIBRARY,
         state_file: Path = DEFAULT_STATE,
         export: ExportRange | None | Literal["default"] = "default",
         project: Path | None = None,
+        min_confidence: float = MIN_CONFIDENCE,
     ) -> None:
         self.detector = detector
+        self.min_confidence = min_confidence
         self.library = library.expanduser()
         self.state_file = state_file
         self.export = _default_export() if export == "default" else export
@@ -178,6 +186,7 @@ class Launcher:
             recent=recent,
             apple_photos=self.export is not None,
             library=str(self.library),
+            min_confidence=self.min_confidence,
         )
 
     # ------------------------------------------------------------ import
@@ -195,15 +204,25 @@ class Launcher:
         self,
         source: Path,
         project: Path,
+        min_confidence: float,
         files: list[Path] | None = None,
         fallback: dict[str, Photo] | None = None,
     ) -> None:
-        self._step("Loading the detector")
-        detector = self.detector()
-        self._step("Finding circles")
-        created = create_project(source, project, detector, fallback, log=self._log, files=files)
-        if not created.order:
-            raise ValueError("no circle found in any of the photos")
+        existed = project.exists()
+        try:
+            self._step("Loading the detector")
+            detector = self.detector(min_confidence)
+            self._step("Finding circles")
+            created = create_project(
+                source, project, detector, fallback, log=self._log, files=files
+            )
+            if not created.order:
+                raise ValueError("no circle found in any of the photos")
+        except BaseException:
+            # A failed import leaves no (empty) project that a retry would just reopen
+            if not existed:
+                shutil.rmtree(project, ignore_errors=True)
+            raise
 
     def _run(self, plan: Callable[[], Path]) -> None:
         try:
@@ -217,6 +236,7 @@ class Launcher:
 
     def _plan(self, request: ImportRequest) -> Callable[[], Path]:
         """Check the request and return the import, which runs in the background."""
+        conf = self.min_confidence if request.min_confidence is None else request.min_confidence
         if request.source == "apple_photos":
             export, first, last = self.export, request.from_date, request.to_date
             if export is None:
@@ -232,7 +252,7 @@ class Launcher:
                 if not fallback:
                     raise ValueError(f"Apple Photos has no photos from {first} to {last}")
                 project = data / PROJECT_DIR
-                self._make(data, project, fallback=fallback)
+                self._make(data, project, conf, fallback=fallback)
                 return project
 
             return from_photos
@@ -252,7 +272,7 @@ class Launcher:
 
             def from_folder() -> Path:
                 project = folder / PROJECT_DIR
-                self._make(folder, project)
+                self._make(folder, project, conf)
                 return project
 
             return from_folder
@@ -269,7 +289,7 @@ class Launcher:
 
         def from_files() -> Path:
             project = _unique_dir(self.library, safe_name(name))
-            self._make(source, project, files=files)
+            self._make(source, project, conf, files=files)
             return project
 
         return from_files
@@ -320,7 +340,7 @@ class Launcher:
         return api
 
 
-def _no_detector() -> Detector:
+def _no_detector(min_confidence: float) -> Detector:
     raise RuntimeError("no detector")
 
 

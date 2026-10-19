@@ -1263,6 +1263,19 @@
               }
             ],
             "title": "To Date"
+          },
+          "min_confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Confidence"
           }
         },
         "type": "object",
@@ -1360,6 +1373,10 @@
           "library": {
             "type": "string",
             "title": "Library"
+          },
+          "min_confidence": {
+            "type": "number",
+            "title": "Min Confidence"
           }
         },
         "type": "object",
@@ -1367,7 +1384,8 @@
           "project",
           "recent",
           "apple_photos",
-          "library"
+          "library",
+          "min_confidence"
         ],
         "title": "LauncherInfo"
       },

@@ -497,6 +497,8 @@ export interface components {
             from_date?: string | null;
             /** To Date */
             to_date?: string | null;
+            /** Min Confidence */
+            min_confidence?: number | null;
         };
         /** ImportStatus */
         ImportStatus: {
@@ -541,6 +543,8 @@ export interface components {
             apple_photos: boolean;
             /** Library */
             library: string;
+            /** Min Confidence */
+            min_confidence: number;
         };
         /** OpenRequest */
         OpenRequest: {

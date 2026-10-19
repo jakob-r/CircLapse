@@ -1,3 +1,4 @@
+import shutil
 import time
 
 import pytest
@@ -30,10 +31,13 @@ def photos(tmp_path):
 
 def make(tmp_path, **kwargs):
     launcher = Launcher(
-        FakeDetector,
-        library=tmp_path / "library",
-        state_file=tmp_path / "state.json",
-        **{"export": None, **kwargs},
+        **{
+            "detector": lambda conf: FakeDetector(),
+            "library": tmp_path / "library",
+            "state_file": tmp_path / "state.json",
+            "export": None,
+            **kwargs,
+        }
     )
     return launcher, TestClient(launcher)
 
@@ -46,6 +50,7 @@ def test_start_page_has_no_project(tmp_path):
         "recent": [],
         "apple_photos": False,
         "library": str(tmp_path / "library"),
+        "min_confidence": 0.81,
     }
     assert client.get("/api/project").status_code == 404
 
@@ -104,6 +109,7 @@ def test_import_errors(tmp_path, photos):
     status = wait(client)
     assert status["state"] == "error"
     assert "no circle" in status["error"]
+    assert not (dark / "circlapse").exists()
 
 
 def test_apple_photos_export_goes_to_the_library(tmp_path):
@@ -139,3 +145,25 @@ def test_open_recent_and_forget_missing(tmp_path, photos):
     assert client.post("/api/launcher/open", json={"path": str(tmp_path)}).status_code == 404
     (photos / "circlapse" / "project.json").unlink()
     assert launcher.info().recent == []
+
+
+def test_import_uses_the_requested_confidence(tmp_path, photos):
+    used = []
+
+    def detector(conf):
+        used.append(conf)
+        return FakeDetector()
+
+    _, client = make(tmp_path, detector=detector)
+    body = {"source": "paths", "paths": [str(photos)], "min_confidence": 0.9}
+    client.post("/api/launcher/import", json=body)
+    assert wait(client)["state"] == "done"
+    client.post("/api/launcher/close")
+    client.delete("/api/launcher/import")
+    other = tmp_path / "other"
+    shutil.copytree(photos, other, ignore=shutil.ignore_patterns("circlapse"))
+    client.post("/api/launcher/import", json={"source": "paths", "paths": [str(other)]})
+    assert wait(client)["state"] == "done"
+    assert used == [0.9, 0.81]
+    bad = client.post("/api/launcher/import", json={**body, "min_confidence": 1.5})
+    assert bad.status_code == 422

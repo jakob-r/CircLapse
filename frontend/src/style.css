@@ -856,3 +856,14 @@ select {
 .start .message {
   padding: 12px 0 0;
 }
+.start-threshold {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 320px);
+  justify-content: start;
+  align-items: center;
+  gap: 4px 16px;
+  margin: -12px 0 28px;
+}
+.start-threshold .hint {
+  grid-column: 1 / -1;
+}
