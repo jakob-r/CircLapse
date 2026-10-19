@@ -376,7 +376,7 @@
     "/api/sorted": {
       "get": {
         "summary": "Sorted Order",
-        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end. ``loop`` makes the last photo\nsimilar to the first, for videos that play in a loop. Photos are compared as the\nvideo shows them: aligned and cropped like the aligned previews.",
+        "description": "The project order with the photos that have a circle arranged by similarity;\nthe others keep their relative order at the end. ``region`` picks which part of the\nframe counts for color. ``loop`` makes the last photo similar to the first, for videos\nthat play in a loop. Photos are compared as the video shows them: aligned and cropped\nlike the aligned previews.",
         "operationId": "sorted_order_api_sorted_get",
         "parameters": [
           {
@@ -386,10 +386,26 @@
             "schema": {
               "enum": [
                 "color",
-                "geometry"
+                "geometry",
+                "meaning"
               ],
               "type": "string",
               "title": "By"
+            }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "inside",
+                "outside",
+                "whole"
+              ],
+              "type": "string",
+              "default": "whole",
+              "title": "Region"
             }
           },
           {

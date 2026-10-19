@@ -1,6 +1,11 @@
 import numpy as np
 
-from circlapse.studio.similarity import geometry_features, similarity_path
+from circlapse.studio.similarity import (
+    color_features,
+    color_region,
+    geometry_features,
+    similarity_path,
+)
 
 
 def path_length(x, path):
@@ -44,3 +49,27 @@ def test_closed_similarity_path_comes_back_to_the_start():
     # Points on a circle: every step of the loop, including last → first, is a neighbour
     steps = np.linalg.norm(x[path] - x[np.roll(path, -1)], axis=1)
     assert steps.max() < 0.3
+
+
+def disk(inside, outside, extent=1.4):
+    r = np.hypot(*(np.mgrid[:96, :96] - 47.5)) / (48 / extent)
+    return np.where((r < 1)[..., None], inside, outside).astype(np.uint8)
+
+
+def test_color_regions_see_only_their_part_of_the_frame():
+    red, blue, gray = [200, 40, 40], [40, 40, 200], [128, 128, 128]
+    a = color_features(disk(red, gray), 1.4)
+    other_outside = color_features(disk(red, blue), 1.4)
+    other_inside = color_features(disk(blue, gray), 1.4)
+    assert len(color_region(a, "inside")) == 9
+    assert len(color_region(a, "outside")) == 3
+    assert len(color_region(a, "whole")) == 12
+
+    def dist(x, y, region):
+        return np.linalg.norm(color_region(x, region) - color_region(y, region))
+
+    assert dist(a, other_outside, "inside") < 1
+    assert dist(a, other_outside, "outside") > 10
+    assert dist(a, other_inside, "outside") < 1
+    assert dist(a, other_inside, "inside") > 10
+    assert dist(a, other_inside, "whole") > 10

@@ -41,8 +41,9 @@ circlapse make ~/circles --from-apple-photos --from-date 2025-07-01 --to-date 20
    Camera RAW files (ARW, CR2, CR3, NEF, RAF, DNG, ORF, RW2) are converted to JPEG on the way in,
    keeping capture time and GPS. A RAW file is skipped when a JPEG of the same name is in the folder.
 2. The studio opens in your browser:
-   - drag photos to reorder them, or sort them by date (the original order), color or shape
-     (both compare the aligned, cropped frames; shape ignores rotation),
+   - drag photos to reorder them, or sort them with **Sort…** by date (the original order),
+     color (inside the circle, outside or the whole frame), shape or meaning (a DINOv2
+     embedding); all but date compare the aligned, cropped frames and can loop,
    - ✕ skips a photo (it leaves the video), the "Skipped" section brings it back,
    - click a photo to correct its ellipse,
    - "Aligned" shows the rectified, cropped frames, "Preview" plays them,

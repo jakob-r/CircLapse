@@ -1,7 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import {
-  fetchSortedOrder,
   saveProject,
   useImages,
   useProject,
@@ -9,12 +8,12 @@ import {
   type PhotoInfo,
   type ProjectInfo,
   type ProjectUpdate,
-  type SortBy,
 } from "../api";
-import { moveItem, setSkipped, sortByDate } from "../projectOps";
+import { moveItem, setSkipped } from "../projectOps";
 import { imageRoute } from "../routes";
 import { ExportDialog } from "./ExportDialog";
 import { Player } from "./Player";
+import { SortDialog } from "./SortDialog";
 import { ThumbImage } from "./ThumbImage";
 
 type View = "photos" | "aligned";
@@ -158,9 +157,7 @@ export function Studio() {
   const [exporting, setExporting] = useState(false);
   const [dragged, setDragged] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const [sorting, setSorting] = useState<SortBy | null>(null);
-  const [sortError, setSortError] = useState<string | null>(null);
-  const [loop, setLoop] = useState(false);
+  const [sorting, setSorting] = useState(false);
   const name = project.data?.name;
   useEffect(() => {
     if (name) document.title = `${name} · circlapse`;
@@ -178,19 +175,6 @@ export function Studio() {
 
   const skip = (name: string, on: boolean) =>
     update((u) => ({ ...u, skipped: setSkipped(u.skipped, name, on) }));
-
-  const sortBySimilarity = async (by: SortBy) => {
-    setSorting(by);
-    setSortError(null);
-    try {
-      const order = await fetchSortedOrder(by, loop);
-      update((u) => ({ ...u, order }));
-    } catch (e) {
-      setSortError(String(e));
-    } finally {
-      setSorting(null);
-    }
-  };
 
   const drop = (to: number) => {
     if (dragged === null) return;
@@ -235,48 +219,12 @@ export function Studio() {
             Aligned
           </button>
         </nav>
-        <nav className="filters sort" aria-label="Sort photos">
-          <span className="meta">Sort by</span>
-          <button
-            disabled={sorting !== null}
-            onClick={() => update((u) => ({ ...u, order: sortByDate(u.order, p.photos) }))}
-          >
-            Date
-          </button>
-          <button
-            disabled={sorting !== null}
-            title="Similar colors in the aligned, cropped frame next to each other"
-            onClick={() => void sortBySimilarity("color")}
-          >
-            {sorting === "color" ? "Sorting…" : "Color"}
-          </button>
-          <button
-            disabled={sorting !== null}
-            title="Similar patterns in the aligned, cropped frame next to each other"
-            onClick={() => void sortBySimilarity("geometry")}
-          >
-            {sorting === "geometry" ? "Sorting…" : "Shape"}
-          </button>
-          <label
-            className="loop-toggle"
-            title="Color and shape: make the last photo similar to the first, for looping videos"
-          >
-            <input
-              type="checkbox"
-              aria-label="Loop"
-              checked={loop}
-              onChange={(e) => setLoop(e.target.checked)}
-            />
-            <svg viewBox="0 0 24 12" width="20" height="10" aria-hidden="true">
-              <path
-                d="M6 1.5C3.5 1.5 1.5 3.5 1.5 6s2 4.5 4.5 4.5c4 0 8-9 12-9 2.5 0 4.5 2 4.5 4.5s-2 4.5-4.5 4.5c-4 0-8-9-12-9z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-            </svg>
-          </label>
-        </nav>
+        <button
+          title="Order the photos by date, color, shape or meaning"
+          onClick={() => setSorting(true)}
+        >
+          Sort…
+        </button>
         <span className="spacer" />
         <button disabled={p.frames === 0} onClick={() => setPlaying(true)}>
           ▶ Preview
@@ -286,7 +234,6 @@ export function Studio() {
         </button>
       </header>
       {error && <div className="message error">Saving failed: {error}</div>}
-      {sortError && <div className="message error">Sorting failed: {sortError}</div>}
       <p className="hint">
         Drag photos to reorder, ✕ skips one, click a photo to correct its
         ellipse.
@@ -368,6 +315,9 @@ export function Studio() {
       )}
       {exporting && (
         <ExportDialog project={p} update={update} onClose={() => setExporting(false)} />
+      )}
+      {sorting && (
+        <SortDialog photos={p.photos} update={update} onClose={() => setSorting(false)} />
       )}
     </div>
   );

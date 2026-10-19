@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from circlapse.labels import ScoredEllipse, load_labels, save_labels
+from circlapse.studio import embedding
 from circlapse.studio.app import create_studio_app
 from circlapse.studio.project import create_project, is_project, load_project, save_project
 
@@ -168,12 +169,45 @@ def test_export(project):
     assert c.post("/api/export", json={**settings, "formats": []}).status_code == 422
 
 
-@pytest.mark.parametrize("by", ["color", "geometry"])
-def test_sorted_order_keeps_every_photo(project, by):
+@pytest.mark.parametrize(
+    ("by", "region"),
+    [("color", "inside"), ("color", "outside"), ("color", "whole"), ("geometry", "whole")],
+)
+def test_sorted_order_keeps_every_photo(project, by, region):
     _, proj = project
     c = TestClient(create_studio_app(proj))
     order = c.get("/api/project").json()["order"]
-    r = c.get("/api/sorted", params={"by": by})
+    r = c.get("/api/sorted", params={"by": by, "region": region, "loop": True})
     assert r.status_code == 200
     assert sorted(r.json()["order"]) == sorted(order)
     assert c.get("/api/sorted", params={"by": "size"}).status_code == 422
+
+
+def test_sorted_by_meaning_embeds_each_frame_once(project, monkeypatch):
+    calls = []
+
+    def fake_embed(frames):
+        calls.append(len(frames))
+        assert all(f.shape == (embedding.SIZE, embedding.SIZE, 3) for f in frames)
+        return np.array([[f.mean(), 1.0] for f in frames])
+
+    monkeypatch.setattr(embedding, "available", lambda: True)
+    monkeypatch.setattr(embedding, "embed", fake_embed)
+    _, proj = project
+    c = TestClient(create_studio_app(proj))
+    order = c.get("/api/project").json()["order"]
+    r = c.get("/api/sorted", params={"by": "meaning"})
+    assert r.status_code == 200
+    assert sorted(r.json()["order"]) == sorted(order)
+    assert c.get("/api/sorted", params={"by": "meaning", "loop": True}).status_code == 200
+    # The second sort reuses the cached embeddings
+    assert len(calls) == 1
+
+
+def test_sorted_by_meaning_needs_the_ml_extra(project, monkeypatch):
+    monkeypatch.setattr(embedding, "available", lambda: False)
+    _, proj = project
+    c = TestClient(create_studio_app(proj))
+    r = c.get("/api/sorted", params={"by": "meaning"})
+    assert r.status_code == 503
+    assert "ml extra" in r.json()["detail"]

@@ -20,6 +20,7 @@ from circlapse.annotate.app import ImageStore, annotation_router, mount_frontend
 from circlapse.ellipse import Ellipse
 from circlapse.labels import Dataset, load_image
 from circlapse.render import Frame, grade, plan_frames, render, warp
+from circlapse.studio import embedding
 from circlapse.studio.project import (
     EXPORT_DIR,
     ExportSettings,
@@ -30,7 +31,15 @@ from circlapse.studio.project import (
     sync,
     usable_labels,
 )
-from circlapse.studio.similarity import SortBy, features, similarity_path
+from circlapse.studio.similarity import (
+    ColorRegion,
+    Features,
+    SortBy,
+    color_region,
+    features,
+    frame,
+    similarity_path,
+)
 
 PREVIEW_SIZE = 320
 
@@ -93,7 +102,9 @@ def create_studio_app(project_dir: Path) -> FastAPI:
     status = ExportStatus(directory=str(export_dir))
     lock = threading.Lock()
     # Similarity descriptors by photo, valid while its ellipse and crop are unchanged
-    descriptors: dict[str, tuple[str, dict[SortBy, np.ndarray]]] = {}
+    descriptors: dict[str, tuple[str, dict[Features, np.ndarray]]] = {}
+    # Meaning embeddings by photo, same validity; only computed when sorting by meaning
+    embeddings: dict[str, tuple[str, np.ndarray]] = {}
 
     app = FastAPI(title="circlapse studio")
     app.include_router(annotation_router(store, names=lambda: project.order))
@@ -197,8 +208,11 @@ def create_studio_app(project_dir: Path) -> FastAPI:
             dst, media_type="image/jpeg", headers={"Cache-Control": "max-age=31536000"}
         )
 
-    def descriptor(name: str, e: Ellipse, extent: float) -> dict[SortBy, np.ndarray]:
-        key = f"{e.model_dump_json()}|{extent:.4f}"
+    def descriptor_key(e: Ellipse, extent: float) -> str:
+        return f"{e.model_dump_json()}|{extent:.4f}"
+
+    def descriptor(name: str, e: Ellipse, extent: float) -> dict[Features, np.ndarray]:
+        key = descriptor_key(e, extent)
         cached = descriptors.get(name)
         if cached is None or cached[0] != key:
             width = store.size_of(name)[0]
@@ -206,29 +220,51 @@ def create_studio_app(project_dir: Path) -> FastAPI:
             descriptors[name] = cached
         return cached[1]
 
+    def meanings(crops: dict[str, tuple[Ellipse, float]]) -> list[np.ndarray]:
+        """Embeddings of the frames, computing only those whose crop changed."""
+        keys = {n: descriptor_key(e, extent) for n, (e, extent) in crops.items()}
+        missing = [n for n in crops if embeddings.get(n, ("",))[0] != keys[n]]
+        if missing:
+
+            def make_frame(n: str) -> np.ndarray:
+                e, extent = crops[n]
+                width = store.size_of(n)[0]
+                return frame(store.display(n), e, width, extent, embedding.SIZE)
+
+            with ThreadPoolExecutor() as pool:
+                frames = list(pool.map(make_frame, missing))
+            for n, v in zip(missing, embedding.embed(frames), strict=True):
+                embeddings[n] = (keys[n], v)
+        return [embeddings[n][1] for n in crops]
+
     @app.get("/api/sorted")
-    def sorted_order(by: SortBy, loop: bool = False) -> SortedOrder:
+    def sorted_order(by: SortBy, region: ColorRegion = "whole", loop: bool = False) -> SortedOrder:
         """The project order with the photos that have a circle arranged by similarity;
-        the others keep their relative order at the end. ``loop`` makes the last photo
-        similar to the first, for videos that play in a loop. Photos are compared as the
-        video shows them: aligned and cropped like the aligned previews."""
+        the others keep their relative order at the end. ``region`` picks which part of the
+        frame counts for color. ``loop`` makes the last photo similar to the first, for videos
+        that play in a loop. Photos are compared as the video shows them: aligned and cropped
+        like the aligned previews."""
+        if by == "meaning" and not embedding.available():
+            raise HTTPException(503, "Sorting by meaning needs the ml extra: uv sync --extra ml")
         extent = plan(project)[2]
-        ellipses = {}
+        crops: dict[str, tuple[Ellipse, float]] = {}
         for name in project.order:
             label = dataset.label(name)
-            if label.status == "labeled" and label.prominent_ellipse is not None:
-                ellipses[name] = label.prominent_ellipse
-        names = list(ellipses)
-        with ThreadPoolExecutor() as pool:
-            descs = list(
-                pool.map(
-                    lambda n: descriptor(n, ellipses[n], preview_extent(n, ellipses[n], extent)),
-                    names,
-                )
-            )
-        x = np.array([d[by] for d in descs]).reshape(len(names), -1)
+            e = label.prominent_ellipse
+            if label.status == "labeled" and e is not None:
+                crops[name] = (e, preview_extent(name, e, extent))
+        names = list(crops)
+        if by == "meaning":
+            rows = meanings(crops)
+        else:
+            with ThreadPoolExecutor() as pool:
+                descs = list(pool.map(lambda n: descriptor(n, *crops[n]), names))
+            rows = [d[by] for d in descs]
+            if by == "color":
+                rows = [color_region(r, region) for r in rows]
+        x = np.array(rows).reshape(len(names), -1)
         ordered = [names[i] for i in similarity_path(x, closed=loop)]
-        rest = [n for n in project.order if n not in ellipses]
+        rest = [n for n in project.order if n not in crops]
         return SortedOrder(order=ordered + rest)
 
     def run_export(p: Project) -> None:

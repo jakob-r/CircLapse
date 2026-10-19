@@ -125,9 +125,6 @@ kbd {
   flex-wrap: wrap;
   gap: 6px;
 }
-.filters.sort {
-  align-items: center;
-}
 .loop-toggle {
   display: inline-flex;
   align-items: center;
@@ -557,4 +554,148 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Short enough not to scroll, and the info tips may reach past its edges */
+.sort-dialog {
+  overflow: visible;
+}
+.sort-dialog .meta {
+  margin: 0;
+}
+.sort-options,
+.sort-setting {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.sort-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.sort-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #22262d;
+  cursor: pointer;
+}
+.sort-option:hover {
+  border-color: var(--muted);
+}
+.sort-option.active {
+  border-color: var(--accent);
+  background: rgb(76 195 255 / 8%);
+}
+.sort-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.sort-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sort-option-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+.sort-setting {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sort-setting legend {
+  float: left;
+  margin-right: 4px;
+  color: var(--muted);
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented label {
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.segmented label + label {
+  border-left: 1px solid var(--border);
+}
+.segmented label.active {
+  color: var(--text);
+  background: rgb(76 195 255 / 15%);
+}
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.loop-toggle[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+/* The tip spans the option or row the ⓘ sits in, so it never leaves the dialog */
+.info {
+  color: var(--muted);
+  cursor: help;
+  line-height: 1;
+}
+.info:hover,
+.info:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+.info-tip {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0e1013;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 50%);
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.info:hover .info-tip,
+.info:focus-visible .info-tip {
+  visibility: visible;
+  opacity: 1;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .sort-options {
+    grid-template-columns: 1fr;
+  }
 }

@@ -110,13 +110,28 @@ export async function saveProject(update: ProjectUpdate): Promise<ProjectInfo> {
   return toProject(await json<Schemas["ProjectInfo"]>(res));
 }
 
-export type SortBy = "color" | "geometry";
+export type SortBy = "color" | "geometry" | "meaning";
+export type ColorRegion = "inside" | "outside" | "whole";
 
-/** The project order with similar photos next to each other; `loop` also makes the last
- * photo similar to the first. */
-export async function fetchSortedOrder(by: SortBy, loop: boolean): Promise<string[]> {
-  const res = await fetch(`/api/sorted?by=${by}&loop=${loop}`);
-  return (await json<Schemas["SortedOrder"]>(res)).order;
+/** The project order with similar photos next to each other; `region` picks the part of the
+ * frame whose colors count, `loop` also makes the last photo similar to the first. */
+export async function fetchSortedOrder(
+  by: SortBy,
+  { region, loop }: { region: ColorRegion; loop: boolean },
+): Promise<string[]> {
+  const params = new URLSearchParams({ by, region, loop: String(loop) });
+  const res = await fetch(`/api/sorted?${params}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text;
+    try {
+      detail = String((JSON.parse(text) as { detail?: unknown }).detail ?? text);
+    } catch {
+      // Not JSON, show it as it is
+    }
+    throw new Error(detail);
+  }
+  return ((await res.json()) as Schemas["SortedOrder"]).order;
 }
 
 export async function startExport(settings: ExportSettings): Promise<ExportStatus> {

@@ -5,10 +5,12 @@ centered disk and cropped like the video. That makes the descriptors independent
 and circle size, and only what the video shows counts:
 
 - **color**: mean L*a*b* of the center, middle and rim of the circle and of the surroundings
-  in the frame;
+  in the frame; :func:`color_region` keeps only the circle, only the surroundings or all;
 - **geometry**: the structure of the frame, as the gradient magnitude in polar coordinates
   whose Fourier magnitudes along the angle are kept. That ignores rotation and mirroring but keeps
-  e.g. the number of spokes and where the rings are. The frame corners are left out.
+  e.g. the number of spokes and where the rings are. The frame corners are left out;
+- **meaning**: an embedding of the frame by a pretrained vision network, see
+  :mod:`circlapse.studio.embedding`. It is computed separately, only when asked for.
 
 The order is a short path through the descriptors: a greedy nearest-neighbour chain started at
 the most unusual photo, then improved by 2-opt. For looping videos the path can be closed, so
@@ -28,21 +30,23 @@ import numpy as np
 from circlapse.ellipse import Ellipse
 from circlapse.render import warp
 
-SortBy = Literal["color", "geometry"]
+SortBy = Literal["color", "geometry", "meaning"]
+Features = Literal["color", "geometry"]
+ColorRegion = Literal["inside", "outside", "whole"]
 
 SIZE = 96
 RADII, ANGLES, HARMONICS = 32, 64, 12
 
 
-def _frame(path: Path, e: Ellipse, width: int, extent: float) -> np.ndarray:
-    """The video frame of the photo at ``path``, whose full width is ``width`` pixels, with a
-    half side of ``extent`` circle radii."""
-    # Decoding at a quarter of the size is plenty for a 96 px frame and much faster
+def frame(path: Path, e: Ellipse, width: int, extent: float, size: int = SIZE) -> np.ndarray:
+    """The ``size`` px video frame of the photo at ``path``, whose full width is ``width``
+    pixels, with a half side of ``extent`` circle radii."""
+    # Decoding at a quarter of the size is plenty for a small frame and much faster
     bgr = cv2.imread(str(path), cv2.IMREAD_REDUCED_COLOR_4)
     if bgr is None:
         raise ValueError(f"cannot read {path}")
     image = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-    return warp(image, e.scaled(image.shape[1] / width), extent, SIZE)
+    return warp(image, e.scaled(image.shape[1] / width), extent, size)
 
 
 def _radius_map(extent: float) -> np.ndarray:
@@ -64,6 +68,15 @@ def color_features(frame: np.ndarray, extent: float) -> np.ndarray:
     return np.concatenate(out)
 
 
+def color_region(f: np.ndarray, region: ColorRegion) -> np.ndarray:
+    """The part of the :func:`color_features` ``f`` that describes the ``region``."""
+    if region == "inside":
+        return f[:9]
+    if region == "outside":
+        return f[9:]
+    return f
+
+
 def geometry_features(frame: np.ndarray, extent: float) -> np.ndarray:
     del extent  # the polar grid covers the frame, whatever the crop
     gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY).astype(np.float32)
@@ -80,16 +93,17 @@ def geometry_features(frame: np.ndarray, extent: float) -> np.ndarray:
     return f / norm if norm > 0 else f
 
 
-FEATURES: dict[SortBy, Callable[[np.ndarray, float], np.ndarray]] = {
+FEATURES: dict[Features, Callable[[np.ndarray, float], np.ndarray]] = {
     "color": color_features,
     "geometry": geometry_features,
 }
 
 
-def features(path: Path, e: Ellipse, width: int, extent: float) -> dict[SortBy, np.ndarray]:
-    """Both descriptors of the video frame with a half side of ``extent`` circle radii."""
-    frame = _frame(path, e, width, extent)
-    return {by: fn(frame, extent) for by, fn in FEATURES.items()}
+def features(path: Path, e: Ellipse, width: int, extent: float) -> dict[Features, np.ndarray]:
+    """Color and geometry descriptors of the video frame with a half side of ``extent``
+    circle radii."""
+    f = frame(path, e, width, extent)
+    return {by: fn(f, extent) for by, fn in FEATURES.items()}
 
 
 def similarity_path(x: np.ndarray, closed: bool = False) -> list[int]:
